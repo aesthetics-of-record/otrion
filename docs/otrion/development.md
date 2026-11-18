@@ -12,12 +12,12 @@ nvm use
 npm install -g "$(node -p "require('./package.json').packageManager")"
 PNPM_CONFIG_FROZEN_LOCKFILE=true pnpm install --frozen-lockfile
 pnpm run build-fast
-./scripts/code.sh .
+env -u ELECTRON_RUN_AS_NODE ./scripts/code.sh .
 ```
 
-Node 버전은 `.nvmrc`, pnpm 버전은 루트 `package.json`에 고정돼 있습니다. 현재 값은 각각 24.22.1과 12.16.0입니다. 이미 해당 버전의 pnpm을 사용할 수 있으면 전역 설치 단계는 생략합니다. 최초 실행 시 런처가 Electron과 추가 내장 확장을 내려받습니다.
+Node 버전은 `.nvmrc`, pnpm 버전은 루트 `package.json`에 고정돼 있습니다. 현재 값은 각각 24.22.1과 12.16.0입니다. 이미 해당 버전의 pnpm을 사용할 수 있으면 전역 설치 단계는 생략합니다. 위 실행 명령은 IDE 내 터미널에서 상속될 수 있는 Electron의 Node 전용 모드를 해제합니다. 최초 실행 시 런처가 Electron과 추가 내장 확장을 내려받습니다.
 
-개발 빌드는 `pnpm run build-fast`로 증분 갱신합니다. 타입 검사까지 포함한 전체 컴파일은 `pnpm run compile`을 사용합니다. 지속적으로 편집할 때는 한 터미널에서 `pnpm run watch`를 실행하고, 첫 빌드가 끝나면 다른 터미널에서 `nvm use`, `./scripts/code.sh .`를 실행합니다. Linux도 셸 런처를 사용하며 Windows의 진입점은 `scripts\code.bat`입니다. [플랫폼별 네이티브 빌드 도구](https://github.com/microsoft/vscode/wiki/How-to-Contribute#prerequisites)
+개발 빌드는 `pnpm run build-fast`로 증분 갱신합니다. 타입 검사까지 포함한 전체 컴파일은 `pnpm run compile`을 사용합니다. 지속적으로 편집할 때는 한 터미널에서 `pnpm run watch`를 실행하고, 첫 빌드가 끝나면 다른 터미널에서 `nvm use`, `env -u ELECTRON_RUN_AS_NODE ./scripts/code.sh .`를 실행합니다. Linux도 셸 런처를 사용하며 Windows의 진입점은 `scripts\code.bat`입니다. [플랫폼별 네이티브 빌드 도구](https://github.com/microsoft/vscode/wiki/How-to-Contribute#prerequisites)
 
 ## 첫 기능 확인
 
