@@ -1,0 +1,16 @@
+/* Copyright (c) Otrion contributors. Licensed under the MIT License. */
+body { color: var(--vscode-foreground); padding: 24px; }
+main { max-width: 680px; margin: 0 auto; }
+h1 { font-weight: 500; font-size: 26px; }
+.group { margin-top: 32px; }
+main > p, .availability { color: var(--vscode-descriptionForeground); line-height: 1.5; }
+section { padding: 14px 0 20px; border-top: 1px solid var(--vscode-widget-border, var(--vscode-panel-border)); }
+section h2 { font-size: 16px; }
+label { display: flex; gap: 6px; align-items: center; cursor: pointer; }
+.controls { display: flex; gap: 8px; margin-top: 12px; }
+button { background: var(--vscode-button-background); color: var(--vscode-button-foreground); border: 1px solid var(--vscode-contrastBorder, transparent); border-radius: 3px; padding: 5px 12px; cursor: pointer; font: inherit; }
+button:hover { background: var(--vscode-button-hoverBackground); }
+button:disabled { opacity: .6; cursor: default; }
+:focus-visible { outline: 1px solid var(--vscode-focusBorder); outline-offset: 2px; }
+.error { color: var(--vscode-errorForeground); white-space: pre-wrap; overflow-wrap: anywhere; }
+.error:empty { display: none; }
