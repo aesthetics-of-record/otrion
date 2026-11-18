@@ -23,6 +23,23 @@ Run `pnpm run build-fast` for incremental development builds or `pnpm run compil
 
 A new Otrion profile opens directly in the editor. The product disables core telemetry in development and packaged builds, turns off automatic crash reporting and experiments, and ships without the built-in Copilot Chat extension. The `defaultChatAgent.enabled` switch in `product.json` controls the bundled provider. The authentication API remains available to extensions that need a user-selected account. Third-party extensions can make their own network requests.
 
+## Remote SSH
+
+Otrion Desktop bundles Open Remote - SSH. In the Command Palette, run `Remote-SSH: Connect to Host...` and select an SSH host or enter `user@host`. The extension reads your SSH configuration. The release VSIX, including its MIT license, is checked in under `build/builtin-extensions/`. Development launches and desktop packaging use the same version and SHA-256 from `product.json`. [Upstream release](https://github.com/jeanp413/open-remote-ssh/releases/tag/v0.6.2)
+
+### Remote server for a desktop release
+
+For first-time connections, publish an Otrion remote extension host archive for the target OS and architecture from the **same commit** as the packaged desktop client. The SSH extension reads that commit and the download URL template from the packaged client’s `product.json`. Source launches with `scripts/code.sh` can exercise the extension and host picker, but their root `product.json` has no packaged commit.
+
+For example, on a Linux x64 build host, install the project dependencies and run these commands from the repository root:
+
+```sh
+pnpm run gulp vscode-reh-linux-x64-min
+tar -czf otrion-reh-linux-x64.tar.gz -C .. vscode-reh-linux-x64
+```
+
+Attach the archive to an Otrion GitHub release tagged `ssh-<full-desktop-commit>`. Keep the top-level directory in the archive because the installer strips it when extracting. For private builds, set `remote.SSH.serverDownloadUrlTemplate` in User Settings to your own artifact endpoint. The remote installation uses `~/.otrion-server`. Open Remote - SSH keeps its default strict commit validation.
+
 ## Set up Codex and Claude Code
 
 Open **Otrion → Preferences → Otrion Settings** on macOS or **File → Preferences → Otrion Settings** on Windows and Linux. **Editor Settings** opens the standard editor preferences and keeps the usual keyboard shortcut.

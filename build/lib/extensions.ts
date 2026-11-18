@@ -333,6 +333,7 @@ const excludedExtensions = [
 ];
 
 const marketplaceWebExtensionsExclude = new Set([
+	'jeanp413.open-remote-ssh',
 	'ms-vscode.node-debug',
 	'ms-vscode.node-debug2',
 	'ms-vscode.js-debug-companion',
