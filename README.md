@@ -1,6 +1,6 @@
 # Otrion
 
-Otrion은 Code - OSS를 기반으로 만드는 오픈소스 AI IDE입니다. 현재 기반 릴리스는 `1.147.0`이며, 제품 전용 기능은 `extensions/otrion-*`에 둡니다. [빌드·실행, 확장 개발 및 업스트림 업데이트](docs/otrion/development.md)
+Otrion is an open-source AI IDE based on Code - OSS release `1.147.0`. Otrion-specific features live in built-in extensions under `extensions/otrion-*`. See the [development guide](docs/otrion/development.md) to build and run Otrion, develop extensions, and merge upstream releases.
 
 ---
 
