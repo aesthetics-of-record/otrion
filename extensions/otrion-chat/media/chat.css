@@ -1,0 +1,43 @@
+/* Copyright (c) Otrion contributors. Licensed under the MIT License. */
+
+* { box-sizing: border-box; }
+body {
+	height: 100vh;
+	margin: 0;
+	padding: 0 12px 12px;
+	display: flex;
+	flex-direction: column;
+	gap: 8px;
+	color: var(--vscode-foreground);
+}
+header, .actions { display: flex; justify-content: flex-end; gap: 6px; }
+#messages { flex: 1; min-height: 0; overflow-y: auto; }
+article { padding: 12px 0; border-bottom: 1px solid var(--vscode-sideBarSectionHeader-border); }
+article strong { font-size: 0.9em; color: var(--vscode-descriptionForeground); }
+article div { margin-top: 4px; white-space: pre-wrap; overflow-wrap: anywhere; line-height: 1.5; }
+#status { color: var(--vscode-descriptionForeground); }
+form { display: grid; gap: 6px; }
+textarea {
+	width: 100%;
+	padding: 8px;
+	resize: vertical;
+	font: inherit;
+	color: var(--vscode-input-foreground);
+	background: var(--vscode-input-background);
+	border: 1px solid var(--vscode-input-border, transparent);
+	border-radius: 3px;
+}
+button {
+	font: inherit;
+	padding: 4px 10px;
+	border-radius: 3px;
+	border: 1px solid var(--vscode-contrastBorder, transparent);
+	color: var(--vscode-button-secondaryForeground);
+	background: var(--vscode-button-secondaryBackground);
+	cursor: pointer;
+}
+button:hover { background: var(--vscode-button-secondaryHoverBackground); }
+#send { color: var(--vscode-button-foreground); background: var(--vscode-button-background); }
+#send:hover { background: var(--vscode-button-hoverBackground); }
+:focus-visible { outline: 1px solid var(--vscode-focusBorder); outline-offset: -1px; }
+button:disabled { opacity: 0.5; cursor: default; }

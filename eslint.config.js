@@ -119,6 +119,12 @@ export default [
 		},
 	},
 	{
+		files: ['extensions/otrion-*/**/*.ts'],
+		rules: {
+			'header/header': [2, 'block', [' Copyright (c) Otrion contributors. Licensed under the MIT License. ']],
+		},
+	},
+	{
 		files: [
 			'src/vs/workbench/**/*.ts',
 			'src/vs/sessions/**/*.ts',

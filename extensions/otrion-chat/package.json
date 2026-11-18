@@ -1,0 +1,40 @@
+{
+	"name": "otrion-chat",
+	"displayName": "Otrion Chat",
+	"description": "%description%",
+	"version": "0.1.0",
+	"publisher": "otrion",
+	"license": "MIT",
+	"engines": { "vscode": "^1.147.0" },
+	"main": "./out/extension.js",
+	"extensionKind": ["ui"],
+	"capabilities": {
+		"untrustedWorkspaces": { "supported": false }
+	},
+	"contributes": {
+		"viewsContainers": {
+			"secondarySidebar": [
+				{ "id": "otrion-chat", "title": "Otrion Chat", "icon": "media/orbit.svg" }
+			]
+		},
+		"views": {
+			"otrion-chat": [
+				{ "type": "webview", "id": "otrion.chat", "name": "Codex" }
+			]
+		},
+		"commands": [
+			{ "command": "otrion.chat.open", "category": "Otrion", "title": "%openChat%" }
+		],
+		"configuration": {
+			"title": "Otrion Chat",
+			"properties": {
+				"otrion.chat.codexAcpPath": {
+					"type": "string",
+					"default": "codex-acp",
+					"scope": "application",
+					"description": "%codexAcpPath%"
+				}
+			}
+		}
+	}
+}

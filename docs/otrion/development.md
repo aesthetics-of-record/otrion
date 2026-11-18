@@ -23,6 +23,21 @@ Run `pnpm run build-fast` for incremental development builds or `pnpm run compil
 
 A new Otrion profile opens directly in the editor. The product disables core telemetry in development and packaged builds, turns off automatic crash reporting and experiments, and ships without the built-in Copilot Chat extension. The `defaultChatAgent.enabled` switch in `product.json` controls the bundled provider. The authentication API remains available to extensions that need a user-selected account. Third-party extensions can make their own network requests.
 
+## Chat with Codex in the right sidebar
+
+Otrion Chat is a built-in desktop extension. It starts a local Codex ACP adapter when you send your first message. The adapter uses your Codex credentials and sends requests to your configured model provider.
+
+On macOS or Linux, install the adapter and Codex CLI, then sign in if you have not already done so.
+
+```sh
+npm install -g @agentclientprotocol/codex-acp @openai/codex
+codex login
+```
+
+Open a trusted local folder and run `Otrion: Open Codex Chat` from the Command Palette. After rebuilding an existing checkout, run `Developer: Reload Window` first. Press Enter to send a message or Shift+Enter for a new line. Replies stream into the sidebar. Use **Stop** to interrupt a reply and **New chat** to start a fresh session. The conversation stays available when you hide and reopen the sidebar and clears on window reload.
+
+The session starts in read-only mode in the first workspace folder. In an empty window it uses an empty folder in Otrion Chat's storage. If Otrion cannot find the adapter, set `otrion.chat.codexAcpPath` in User Settings to the absolute path printed by `command -v codex-acp`. On Windows, set it to the native adapter executable. [Codex ACP installation and releases](https://github.com/agentclientprotocol/codex-acp)
+
 ## Try the Otrion Context extension
 
 Select a few lines of code, open the Command Palette (⌘⇧P on macOS), and run `Otrion: Copy Selection with File Path`. Paste into a new document to see the file path, line range, and selected code. If you select multiple ranges, the command copies each excerpt with its own location.
@@ -31,6 +46,7 @@ Select a few lines of code, open the Command Palette (⌘⇧P on macOS), and run
 
 | Location | Purpose |
 | --- | --- |
+| `extensions/otrion-chat/` | The Codex sidebar, webview, and ACP client. The desktop build compiles its TypeScript sources. |
 | `extensions/otrion-context/` | A working built-in extension. Its manifest declares the command, and the extension host loads `extension.js` when the command runs. |
 | `extensions/otrion-*/` | Add product features as extensions. For example, a model provider can live in its own extension, and a chat interface can use the VS Code Chat API. If an extension gains package dependencies, register it in the root `pnpm-workspace.yaml` and update the lockfile. |
 | `product.json` | Configure the application name, data directories, URL scheme, and platform-specific application identifiers. |
