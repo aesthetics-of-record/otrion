@@ -1856,7 +1856,7 @@ export class CodeApplication extends Disposable {
 			const argvString = argvContent.value.toString();
 			const argvJSON = parse<{ 'enable-crash-reporter'?: boolean }>(argvString);
 			const telemetryLevel = getTelemetryLevel(this.configurationService);
-			const enableCrashReporter = telemetryLevel >= TelemetryLevel.CRASH;
+			const enableCrashReporter = this.productService.enableTelemetry !== false && telemetryLevel >= TelemetryLevel.CRASH;
 
 			// Initial startup
 			if (argvJSON['enable-crash-reporter'] === undefined) {

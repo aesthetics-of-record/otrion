@@ -1639,6 +1639,9 @@ export class CloudSandboxApiService extends Disposable implements ICloudSandboxA
 
 	/** A GitHub session carrying at least the configured chat provider scopes. */
 	private async _resolveGitHubSession(): Promise<AuthenticationSession | undefined> {
+		if (this._productService.defaultChatAgent?.enabled === false) {
+			return undefined;
+		}
 		const providerId = this._authenticationProviderId;
 		const scopes = this._productService.defaultChatAgent?.providerScopes?.[0] ?? FALLBACK_SCOPES;
 

@@ -19,6 +19,10 @@ The repository pins Node.js 24.22.1 in `.nvmrc` and pnpm 12.16.0 in the root `pa
 
 Run `pnpm run build-fast` for incremental development builds or `pnpm run compile` for a full build with type checking. For continuous builds, run `pnpm run watch` in one terminal. Once the first build finishes, run `nvm use` and `env -u ELECTRON_RUN_AS_NODE ./scripts/code.sh .` in a second terminal. Linux uses the same shell launcher. On Windows, use `scripts\code.bat`. [Platform-specific build prerequisites](https://github.com/microsoft/vscode/wiki/How-to-Contribute#prerequisites)
 
+## Desktop defaults
+
+A new Otrion profile opens directly in the editor. The product disables core telemetry in development and packaged builds, turns off automatic crash reporting and experiments, and ships without the built-in Copilot Chat extension. The `defaultChatAgent.enabled` switch in `product.json` controls the bundled provider. The authentication API remains available to extensions that need a user-selected account. Third-party extensions can make their own network requests.
+
 ## Try the Otrion Context extension
 
 Select a few lines of code, open the Command Palette (⌘⇧P on macOS), and run `Otrion: Copy Selection with File Path`. Paste into a new document to see the file path, line range, and selected code. If you select multiple ranges, the command copies each excerpt with its own location.

@@ -555,7 +555,7 @@ const copilotVsixPath = path.join(root, '.build', 'copilot-vsix', 'copilot-chat.
  */
 export function packageCopilotExtensionStream(): Stream {
 	const extensionPath = path.join(root, 'extensions', 'copilot');
-	if (!fs.existsSync(extensionPath)) {
+	if (productJson.defaultChatAgent?.enabled === false || !fs.existsSync(extensionPath)) {
 		return es.readArray([]);
 	}
 

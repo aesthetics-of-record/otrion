@@ -224,10 +224,11 @@ export abstract class AbstractNativeEnvironmentService implements INativeEnviron
 
 	get skipBuiltinExtensions(): readonly string[] {
 		const value = env['VSCODE_SKIP_BUILTIN_EXTENSIONS'];
-		if (!value) {
-			return [];
+		const skipped = value?.split(',').map(id => id.trim()).filter(id => id) ?? [];
+		if (this.productService.defaultChatAgent?.enabled === false) {
+			skipped.push(this.productService.defaultChatAgent.chatExtensionId);
 		}
-		return value.split(',').map(id => id.trim()).filter(id => id);
+		return skipped;
 	}
 
 	@memoize

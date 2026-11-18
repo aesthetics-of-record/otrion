@@ -591,6 +591,9 @@ export class ChatSpeechToTextService extends Disposable implements IChatSpeechTo
 			}
 		}));
 		this._register(this._configurationService.onDidChangeConfiguration(e => {
+			if (e.affectsConfiguration('agents.voice.backendUrl')) {
+				void this._refreshGitHubSession();
+			}
 			if (e.affectsConfiguration(ENABLED_SETTING) || e.affectsConfiguration(DICTATION_MODEL_SETTING)) {
 				this._updateConfiguredContextKey();
 			}
@@ -676,6 +679,11 @@ export class ChatSpeechToTextService extends Disposable implements IChatSpeechTo
 
 	private async _refreshGitHubSession(): Promise<void> {
 		const generation = ++this._githubSessionGeneration;
+		if (!this._transcriptionWsUrl()) {
+			this._hasGitHubSession = false;
+			this._updateConfiguredContextKey();
+			return;
+		}
 		try {
 			const sessions = await this._authenticationService.getSessions('github', [], { silent: true });
 			if (generation !== this._githubSessionGeneration || this._store.isDisposed) {

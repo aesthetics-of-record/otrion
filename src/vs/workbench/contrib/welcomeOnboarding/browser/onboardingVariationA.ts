@@ -169,6 +169,9 @@ export class OnboardingVariationA extends Disposable implements IOnboardingServi
 	}
 
 	show(): void {
+		if (defaultChat.enabled === false) {
+			return;
+		}
 		if (this.overlay) {
 			return;
 		}

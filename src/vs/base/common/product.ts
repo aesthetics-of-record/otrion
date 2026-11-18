@@ -429,6 +429,8 @@ export interface IAiGeneratedWorkspaceTrust {
 }
 
 export interface IDefaultChatAgent {
+	/** Whether the product bundles and initializes its default chat provider. */
+	readonly enabled?: boolean;
 	readonly extensionId: string;
 	readonly chatExtensionId: string;
 

@@ -1,5 +1,7 @@
 # Otrion
 
+<img src="resources/server/code-192.png" width="96" height="96" alt="Otrion orbit logo">
+
 Otrion is an open-source AI IDE based on Code - OSS release `1.147.0`. Otrion-specific features live in built-in extensions under `extensions/otrion-*`. See the [development guide](docs/otrion/development.md) to build and run Otrion, develop extensions, and merge upstream releases.
 
 ---

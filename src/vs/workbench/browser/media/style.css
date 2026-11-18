@@ -216,6 +216,16 @@ body {
 	font-size: 16px; /* sets font-size for codicons in workbench (https://github.com/microsoft/vscode/issues/98495) */
 }
 
+/* Use the product mark for workbench controls that request the editor's logo glyph. */
+.monaco-workbench .codicon:is(.codicon-vscode, .codicon-vscode-insiders, .codicon-vscode-compact, .codicon-vscode-insiders-compact)::before {
+	content: '';
+	display: inline-block;
+	width: 1em;
+	height: 1em;
+	background-color: currentColor;
+	mask: url('../parts/editor/media/letterpress-hcDark.svg') center / contain no-repeat;
+}
+
 .monaco-workbench .predefined-file-icon[class*='codicon-']::before {
 	width: 16px;
 	padding-left: 3px; /* width (16px) - font-size (13px) = padding-left (3px) */

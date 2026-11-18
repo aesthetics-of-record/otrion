@@ -394,7 +394,7 @@ export class ChatEntitlementService extends Disposable implements IChatEntitleme
 
 	constructor(
 		@IInstantiationService instantiationService: IInstantiationService,
-		@IProductService productService: IProductService,
+		@IProductService private readonly productService: IProductService,
 		@IWorkbenchEnvironmentService environmentService: IWorkbenchEnvironmentService,
 		@IContextKeyService private readonly contextKeyService: IContextKeyService,
 		@IConfigurationService private readonly configurationService: IConfigurationService,
@@ -455,8 +455,8 @@ export class ChatEntitlementService extends Disposable implements IChatEntitleme
 		);
 		this.sentimentObs = observableFromEvent(this.onDidChangeSentiment, () => this.sentiment);
 
-		if ((isWeb && !environmentService.remoteAuthority && !environmentService.isSessionsWindow)) {
-			ChatEntitlementContextKeys.Setup.hidden.bindTo(this.contextKeyService).set(true); // hide copilot UI on web if unsupported
+		if (productService.defaultChatAgent?.enabled === false || (isWeb && !environmentService.remoteAuthority && !environmentService.isSessionsWindow)) {
+			ChatEntitlementContextKeys.Setup.hidden.bindTo(this.contextKeyService).set(true);
 			return;
 		}
 
@@ -743,6 +743,9 @@ export class ChatEntitlementService extends Disposable implements IChatEntitleme
 	}
 
 	setForceHidden(hidden: boolean): void {
+		if (this.productService.defaultChatAgent?.enabled === false) {
+			return;
+		}
 		if (this.context) {
 			this.context.value.setForceHidden(hidden);
 		} else {

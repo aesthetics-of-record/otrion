@@ -2415,13 +2415,13 @@ configurationRegistry.registerConfiguration({
 		[ChatAIDisabledSettingId]: {
 			type: 'boolean',
 			description: nls.localize('chat.disableAIFeatures', "Disable and hide built-in AI features provided by GitHub Copilot, including chat and inline suggestions."),
-			default: false,
+			default: product.defaultChatAgent?.enabled === false,
 			scope: ConfigurationScope.WINDOW,
 		},
 		[ChatConfiguration.CopilotCliCommandEnabled]: {
 			type: 'boolean',
 			markdownDescription: nls.localize('chat.copilotCliCommand.enabled', "Controls whether integrated terminals include the `copilot` command that ships with VS Code. The command runs GitHub Copilot CLI and offers to install it when it's missing. A GitHub Copilot CLI that you installed yourself isn't affected."),
-			default: true,
+			default: product.defaultChatAgent?.enabled !== false,
 			scope: ConfigurationScope.APPLICATION,
 			policy: {
 				name: 'CopilotCliCommand',
@@ -2480,7 +2480,7 @@ configurationRegistry.registerConfiguration({
 		[ChatConfiguration.TitleBarOpenInAgentsWindowEnabled]: {
 			type: 'boolean',
 			description: nls.localize('chat.titleBar.openInAgentsWindow.enabled', "Controls whether the Open in Agents Window button is shown in the title bar."),
-			default: true,
+			default: product.defaultChatAgent?.enabled !== false,
 		},
 		[ChatConfiguration.TitleBarOpenInAgentsWindowRichHover]: {
 			type: 'string',

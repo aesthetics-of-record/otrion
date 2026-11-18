@@ -3,6 +3,7 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
+import product from '../../product.json' with { type: 'json' };
 import { spawn } from 'child_process';
 import { createHash } from 'crypto';
 import * as esbuild from 'esbuild';
@@ -101,7 +102,8 @@ export async function runBuildFast(repoRoot: string, force: boolean, clientOnly 
 		}
 
 		const outputs = await getOutputStatus(repoRoot);
-		const plan = createBuildPlan(saved, environment, changes, outputs, force, clientOnly);
+		const requested = createBuildPlan(saved, environment, changes, outputs, force, clientOnly);
+		const plan: BuildFastPlan = product.defaultChatAgent.enabled === false ? { ...requested, copilot: 'skip' } : requested;
 		logPlan(plan);
 
 		const hasBuildWork = plan.client !== 'skip' || plan.extensions !== 'skip' || plan.copilot !== 'skip';
@@ -419,8 +421,8 @@ async function runAllFull(repoRoot: string, clientOnly: boolean): Promise<void> 
 		runCommand(repoRoot, process.execPath, [path.join(repoRoot, 'build', 'next', 'index.ts'), 'transpile'], 'client'),
 		...(!clientOnly ? [
 			runPnpm(repoRoot, EXTENSION_BUILD_ARGS, 'extensions'),
-			runPnpm(repoRoot, COPILOT_BUILD_ARGS, 'copilot'),
 		] : []),
+		...(!clientOnly && product.defaultChatAgent.enabled !== false ? [runPnpm(repoRoot, COPILOT_BUILD_ARGS, 'copilot')] : []),
 	]);
 }
 
@@ -468,6 +470,7 @@ function readEnvironment(repoRoot: string): string {
 	};
 	return [
 		`recipe=${BUILD_RECIPE}`,
+		`default-chat-agent=${product.defaultChatAgent.enabled}`,
 		`platform=${process.platform}`,
 		`arch=${process.arch}`,
 		`node=${process.version}`,
