@@ -1,3 +1,9 @@
+# Otrion
+
+Otrion은 Code - OSS를 기반으로 만드는 오픈소스 AI IDE입니다. 현재 기반 릴리스는 `1.147.0`이며, 제품 전용 기능은 `extensions/otrion-*`에 둡니다. [빌드·실행, 확장 개발 및 업스트림 업데이트](docs/otrion/development.md)
+
+---
+
 # Visual Studio Code - Open Source ("Code - OSS")
 [![Feature Requests](https://img.shields.io/github/issues/microsoft/vscode/feature-request.svg)](https://github.com/microsoft/vscode/issues?q=is%3Aopen+is%3Aissue+label%3Afeature-request+sort%3Areactions-%2B1-desc)
 [![Bugs](https://img.shields.io/github/issues/microsoft/vscode/bug.svg)](https://github.com/microsoft/vscode/issues?utf8=✓&q=is%3Aissue+is%3Aopen+label%3Abug)
