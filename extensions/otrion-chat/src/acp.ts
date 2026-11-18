@@ -3,6 +3,8 @@
 import { spawn, type ChildProcessWithoutNullStreams } from 'node:child_process';
 import { createInterface, type Interface } from 'node:readline';
 
+import { agents, type AgentId } from './agents';
+
 interface SessionUpdate {
 	sessionUpdate: string;
 	content?: { type: string; text?: string };
@@ -20,7 +22,7 @@ interface PendingRequest {
 	timer?: NodeJS.Timeout;
 }
 
-export class CodexAcp {
+export class AcpClient {
 	#process: ChildProcessWithoutNullStreams;
 	#lines: Interface;
 	#pending = new Map<number, PendingRequest>();
@@ -29,11 +31,11 @@ export class CodexAcp {
 	#sessionId?: string;
 	#onUpdate: (update: SessionUpdate) => void;
 
-	constructor(executable: string, cwd: string, onUpdate: (update: SessionUpdate) => void) {
+	constructor(private readonly id: AgentId, command: string, args: string[], cwd: string, onUpdate: (update: SessionUpdate) => void) {
 		this.#onUpdate = onUpdate;
-		this.#process = spawn(executable, [], {
+		this.#process = spawn(command, args, {
 			cwd,
-			env: { ...process.env, INITIAL_AGENT_MODE: 'read-only', NO_BROWSER: '1' },
+			env: id === 'codex' ? { ...process.env, INITIAL_AGENT_MODE: 'read-only', NO_BROWSER: '1' } : process.env,
 			stdio: ['pipe', 'pipe', 'pipe'],
 			windowsHide: true,
 		});
@@ -41,10 +43,10 @@ export class CodexAcp {
 		this.#lines = createInterface({ input: this.#process.stdout });
 		this.#lines.on('line', line => this.#receive(line));
 		this.#process.on('error', (error: NodeJS.ErrnoException) => this.dispose(error.code === 'ENOENT'
-			? new Error('Codex ACP was not found. Install it or set otrion.chat.codexAcpPath.')
+			? new Error('Agent executable not found. Open Otrion Settings to install it.')
 			: error));
-		this.#process.stdin.on('error', () => this.dispose(new Error('The Codex ACP connection closed.')));
-		this.#process.on('close', code => this.dispose(new Error(`Codex ACP disconnected (${code ?? 'terminated'}).`)));
+		this.#process.stdin.on('error', () => this.dispose(new Error('The ACP agent connection closed.')));
+		this.#process.on('close', code => this.dispose(new Error(`ACP agent disconnected (${code ?? 'terminated'}).`)));
 	}
 
 	async initialize(cwd: string, version: string) {
@@ -54,11 +56,11 @@ export class CodexAcp {
 			clientInfo: { name: 'otrion', title: 'Otrion', version },
 		}, 30_000);
 		if (result?.protocolVersion !== 1) {
-			throw new Error('Codex ACP did not negotiate protocol version 1.');
+			throw new Error('ACP agent did not negotiate protocol version 1.');
 		}
 		const session = await this.#request('session/new', { cwd, mcpServers: [] }, 60_000);
 		if (typeof session?.sessionId !== 'string' || !session.sessionId) {
-			throw new Error('Codex ACP did not return a session ID.');
+			throw new Error('ACP agent did not return a session ID.');
 		}
 		this.#sessionId = session.sessionId;
 	}
@@ -76,7 +78,7 @@ export class CodexAcp {
 		}
 	}
 
-	dispose(error = new Error('The Codex ACP session ended.')) {
+	dispose(error = new Error('The ACP agent session ended.')) {
 		if (this.#closed) {
 			return;
 		}
@@ -97,11 +99,11 @@ export class CodexAcp {
 
 	#request(method: string, params: object, timeout?: number): Promise<AcpResult> {
 		if (this.#closed) {
-			return Promise.reject(new Error('The Codex ACP connection closed. Start a new chat.'));
+			return Promise.reject(new Error('The ACP agent connection closed. Start a new chat.'));
 		}
 		return new Promise((resolve, reject) => {
 			const id = ++this.#nextId;
-			const timer = timeout ? setTimeout(() => this.dispose(new Error(`Codex ACP timed out during ${method}.`)), timeout) : undefined;
+			const timer = timeout ? setTimeout(() => this.dispose(new Error(`ACP agent timed out during ${method}.`)), timeout) : undefined;
 			this.#pending.set(id, { resolve, reject, timer });
 			this.#write({ id, method, params });
 		});
@@ -115,7 +117,7 @@ export class CodexAcp {
 		try {
 			message = JSON.parse(line);
 		} catch {
-			this.dispose(new Error('Codex ACP returned invalid JSON.'));
+			this.dispose(new Error('ACP agent returned invalid JSON.'));
 			return;
 		}
 		if (message?.jsonrpc !== '2.0') {
@@ -138,8 +140,8 @@ export class CodexAcp {
 			this.#pending.delete(message.id);
 			clearTimeout(pending.timer);
 			if (message.error) {
-				const hint = message.error.code === -32000 ? ' Run codex login if authentication is required.' : '';
-				pending.reject(new Error((message.error.message || 'Codex ACP request failed.') + hint));
+				const hint = message.error.code === -32000 ? ' Open Otrion Settings and sign in to ' + agents[this.id].name + '.' : '';
+				pending.reject(new Error((message.error.message || 'ACP agent request failed.') + hint));
 			} else {
 				pending.resolve(message.result);
 			}

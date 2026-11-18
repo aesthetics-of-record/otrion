@@ -41,3 +41,8 @@ button:hover { background: var(--vscode-button-secondaryHoverBackground); }
 #send:hover { background: var(--vscode-button-hoverBackground); }
 :focus-visible { outline: 1px solid var(--vscode-focusBorder); outline-offset: -1px; }
 button:disabled { opacity: 0.5; cursor: default; }
+
+header { align-items: center; justify-content: space-between; }
+select { font: inherit; color: var(--vscode-dropdown-foreground); background: var(--vscode-dropdown-background); border: 1px solid var(--vscode-dropdown-border); padding: 3px; }
+#settings { align-self: flex-start; }
+#setup { line-height: 1.5; color: var(--vscode-descriptionForeground); }

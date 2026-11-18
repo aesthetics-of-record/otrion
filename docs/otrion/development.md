@@ -23,20 +23,36 @@ Run `pnpm run build-fast` for incremental development builds or `pnpm run compil
 
 A new Otrion profile opens directly in the editor. The product disables core telemetry in development and packaged builds, turns off automatic crash reporting and experiments, and ships without the built-in Copilot Chat extension. The `defaultChatAgent.enabled` switch in `product.json` controls the bundled provider. The authentication API remains available to extensions that need a user-selected account. Third-party extensions can make their own network requests.
 
-## Chat with Codex in the right sidebar
+## Remote SSH
 
-Otrion Chat is a built-in desktop extension. It starts a local Codex ACP adapter when you send your first message. The adapter uses your Codex credentials and sends requests to your configured model provider.
+Otrion Desktop bundles Open Remote - SSH. In the Command Palette, run `Remote-SSH: Connect to Host...` and select an SSH host or enter `user@host`. The extension reads your SSH configuration. The release VSIX, including its MIT license, is checked in under `build/builtin-extensions/`. Development launches and desktop packaging use the same version and SHA-256 from `product.json`. [Upstream release](https://github.com/jeanp413/open-remote-ssh/releases/tag/v0.6.2)
 
-On macOS or Linux, install the adapter and Codex CLI, then sign in if you have not already done so.
+### Remote server for a desktop release
+
+For first-time connections, publish an Otrion remote extension host archive for the target OS and architecture from the **same commit** as the packaged desktop client. The SSH extension reads that commit and the download URL template from the packaged client’s `product.json`. Source launches with `scripts/code.sh` can exercise the extension and host picker, but their root `product.json` has no packaged commit.
+
+For example, on a Linux x64 build host, install the project dependencies and run these commands from the repository root:
 
 ```sh
-npm install -g @agentclientprotocol/codex-acp @openai/codex
-codex login
+pnpm run gulp vscode-reh-linux-x64-min
+tar -czf otrion-reh-linux-x64.tar.gz -C .. vscode-reh-linux-x64
 ```
 
-Open a trusted local folder and run `Otrion: Open Codex Chat` from the Command Palette. After rebuilding an existing checkout, run `Developer: Reload Window` first. Press Enter to send a message or Shift+Enter for a new line. Replies stream into the sidebar. Use **Stop** to interrupt a reply and **New chat** to start a fresh session. The conversation stays available when you hide and reopen the sidebar and clears on window reload.
+Attach the archive to an Otrion GitHub release tagged `ssh-<full-desktop-commit>`. Keep the top-level directory in the archive because the installer strips it when extracting. For private builds, set `remote.SSH.serverDownloadUrlTemplate` in User Settings to your own artifact endpoint. The remote installation uses `~/.otrion-server`. Open Remote - SSH keeps its default strict commit validation.
 
-The session starts in read-only mode in the first workspace folder. In an empty window it uses an empty folder in Otrion Chat's storage. If Otrion cannot find the adapter, set `otrion.chat.codexAcpPath` in User Settings to the absolute path printed by `command -v codex-acp`. On Windows, set it to the native adapter executable. [Codex ACP installation and releases](https://github.com/agentclientprotocol/codex-acp)
+## Set up Codex and Claude Code
+
+Open **Otrion → Preferences → Otrion Settings** on macOS or **File → Preferences → Otrion Settings** on Windows and Linux. **Editor Settings** opens the standard editor preferences and keeps the usual keyboard shortcut.
+
+Each agent has its own **Install**, **Allow**, and **Sign In** controls. Install requires Node.js 22 or newer and npm on your PATH. Otrion downloads a versioned ACP adapter with its agent runtime to the extension’s local storage. Both agents start with chat access turned off. Enable the agents you want to use, then choose **Sign In** if you need to authenticate. The provider handles sign-in in a terminal and can reuse your existing CLI login. [OpenAI authentication](https://learn.chatgpt.com/docs/auth) · [Claude Code ACP adapter](https://github.com/agentclientprotocol/claude-agent-acp)
+
+Otrion also detects existing adapters on your PATH. To select a specific executable, set `otrion.chat.codexAcpPath` or `otrion.chat.claudeAcpPath` in User Settings. A custom path takes precedence over an Otrion-managed install. Restore the default setting to use the managed version. On Windows, use the native executable for a custom path.
+
+## Chat in the right sidebar
+
+Open a trusted local folder and run `Otrion: Open Agent Chat` from the Command Palette. Choose **Codex** or **Claude Code** in the sidebar. Press Enter to send or Shift+Enter for a new line. The agent starts with the first message and uses the first workspace folder. An empty window uses a folder in Otrion Chat’s local storage.
+
+Replies stream into the sidebar. **Stop** interrupts the current reply. **New chat**, switching agents, and reloading the window start a fresh conversation. Hiding the sidebar preserves the current conversation. Turning off an agent’s permission in Otrion Settings ends its active session. Otrion does not approve ACP tool permission requests on the user’s behalf.
 
 ## Try the Otrion Context extension
 
@@ -46,7 +62,7 @@ Select a few lines of code, open the Command Palette (⌘⇧P on macOS), and run
 
 | Location | Purpose |
 | --- | --- |
-| `extensions/otrion-chat/` | The Codex sidebar, webview, and ACP client. The desktop build compiles its TypeScript sources. |
+| `extensions/otrion-chat/` | The agent settings page, chat sidebar, and shared ACP client. The desktop build compiles its TypeScript sources. |
 | `extensions/otrion-context/` | A working built-in extension. Its manifest declares the command, and the extension host loads `extension.js` when the command runs. |
 | `extensions/otrion-*/` | Add product features as extensions. For example, a model provider can live in its own extension, and a chat interface can use the VS Code Chat API. If an extension gains package dependencies, register it in the root `pnpm-workspace.yaml` and update the lockfile. |
 | `product.json` | Configure the application name, data directories, URL scheme, and platform-specific application identifiers. |

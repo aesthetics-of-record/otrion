@@ -45,7 +45,7 @@ export class SettingsEditor2Input extends EditorInput {
 	}
 
 	override getName(): string {
-		return nls.localize('settingsEditor2InputName', "Settings");
+		return nls.localize('editorSettingsInputName', "Editor Settings");
 	}
 
 	override getIcon(): ThemeIcon {

@@ -13,10 +13,18 @@ const input = document.querySelector<HTMLTextAreaElement>('#input')!;
 const send = document.querySelector<HTMLButtonElement>('#send')!;
 const stopButton = document.querySelector<HTMLButtonElement>('#stop')!;
 const newChat = document.querySelector<HTMLButtonElement>('#new')!;
+const agentSelect = document.querySelector<HTMLSelectElement>('#agent')!;
+const setup = document.querySelector<HTMLElement>('#setup')!;
+let enabled = false;
 let busy = false;
+agentSelect.addEventListener('change', () => api.postMessage({ type: 'select', id: agentSelect.value }));
+document.querySelector('#settings')!.addEventListener('click', () => api.postMessage({ type: 'settings' }));
 
 function updateButtons() {
-	send.disabled = busy || !input.value.trim();
+	agentSelect.disabled = busy;
+	input.disabled = !enabled;
+	setup.hidden = enabled;
+	send.disabled = !enabled || busy || !input.value.trim();
 	stopButton.hidden = !busy;
 	newChat.disabled = busy;
 }
@@ -40,12 +48,14 @@ window.addEventListener('message', ({ data }) => {
 			addMessage(message.role, message.text);
 		}
 		busy = data.busy;
+		enabled = data.enabled;
+		agentSelect.value = data.selected;
 		statusLabel.textContent = data.status;
 		updateButtons();
 	} else if (data.type === 'chunk') {
-		const body = messages.children[data.index]?.lastElementChild ?? addMessage('Codex', '');
+		const body = messages.children[data.index]?.lastElementChild ?? addMessage(data.role, '');
 		body.append(data.text);
-		statusLabel.textContent = 'Codex is replying…';
+		statusLabel.textContent = data.role + ' is replying…';
 	}
 	if (atBottom) {
 		messages.scrollTop = messages.scrollHeight;
@@ -54,7 +64,7 @@ window.addEventListener('message', ({ data }) => {
 
 document.querySelector('form')!.addEventListener('submit', event => {
 	event.preventDefault();
-	if (busy || !input.value.trim()) {
+	if (!enabled || busy || !input.value.trim()) {
 		return;
 	}
 	busy = true;

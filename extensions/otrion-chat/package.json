@@ -5,25 +5,49 @@
 	"version": "0.1.0",
 	"publisher": "otrion",
 	"license": "MIT",
-	"engines": { "vscode": "^1.147.0" },
+	"engines": {
+		"vscode": "^1.147.0"
+	},
 	"main": "./out/extension.js",
-	"extensionKind": ["ui"],
+	"extensionKind": [
+		"ui"
+	],
 	"capabilities": {
-		"untrustedWorkspaces": { "supported": false }
+		"untrustedWorkspaces": {
+			"supported": "limited",
+			"description": "Settings are available. Chat requires a trusted workspace."
+		}
 	},
 	"contributes": {
 		"viewsContainers": {
 			"secondarySidebar": [
-				{ "id": "otrion-chat", "title": "Otrion Chat", "icon": "media/orbit.svg" }
+				{
+					"id": "otrion-chat",
+					"title": "Otrion Chat",
+					"icon": "media/orbit.svg"
+				}
 			]
 		},
 		"views": {
 			"otrion-chat": [
-				{ "type": "webview", "id": "otrion.chat", "name": "Codex" }
+				{
+					"type": "webview",
+					"id": "otrion.chat",
+					"name": "Agent Chat"
+				}
 			]
 		},
 		"commands": [
-			{ "command": "otrion.chat.open", "category": "Otrion", "title": "%openChat%" }
+			{
+				"command": "otrion.chat.open",
+				"category": "Otrion",
+				"title": "%openChat%"
+			},
+			{
+				"command": "otrion.settings.open",
+				"category": "Preferences",
+				"title": "Otrion Settings"
+			}
 		],
 		"configuration": {
 			"title": "Otrion Chat",
@@ -33,6 +57,24 @@
 					"default": "codex-acp",
 					"scope": "application",
 					"description": "%codexAcpPath%"
+				},
+				"otrion.chat.claudeAcpPath": {
+					"type": "string",
+					"default": "claude-agent-acp",
+					"scope": "application",
+					"description": "Claude Code ACP executable name or absolute path."
+				},
+				"otrion.chat.codexAllowed": {
+					"type": "boolean",
+					"default": false,
+					"scope": "application",
+					"description": "Allow Otrion to start Codex for chat."
+				},
+				"otrion.chat.claudeAllowed": {
+					"type": "boolean",
+					"default": false,
+					"scope": "application",
+					"description": "Allow Otrion to start Claude Code for chat."
 				}
 			}
 		}

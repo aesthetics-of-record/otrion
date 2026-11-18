@@ -1,5 +1,5 @@
 {
-	"description": "Chat with Codex over the Agent Client Protocol.",
-	"openChat": "Open Codex Chat",
+	"description": "Chat with Codex or Claude Code over the Agent Client Protocol.",
+	"openChat": "Open Agent Chat",
 	"codexAcpPath": "Codex ACP executable name or absolute path."
 }

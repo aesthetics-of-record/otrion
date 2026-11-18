@@ -13,6 +13,7 @@
 	"serverLicensePrompt": "",
 	"serverApplicationName": "otrion-server",
 	"serverDataFolderName": ".otrion-server",
+	"serverDownloadUrlTemplate": "https://github.com/aesthetics-of-record/otrion/releases/download/ssh-${commit}/otrion-reh-${os}-${arch}.tar.gz",
 	"tunnelApplicationName": "otrion-tunnel",
 	"win32DirName": "Otrion",
 	"win32NameVersion": "Otrion",
@@ -36,7 +37,28 @@
 	"urlProtocol": "otrion",
 	"agentsTelemetryAppName": "agents",
 	"webviewContentExternalBaseUrlTemplate": "https://{{uuid}}.vscode-cdn.net/insider/ef65ac1ba57f57f2a3961bfe94aa20481caca4c6/out/vs/workbench/contrib/webview/browser/pre/",
+	"extensionEnabledApiProposals": {
+		"jeanp413.open-remote-ssh": ["resolvers", "contribViewsRemote"]
+	},
 	"builtInExtensions": [
+		{
+			"name": "jeanp413.open-remote-ssh",
+			"version": "0.6.2",
+			"sha256": "0ef955eb76d553663be16e27a1814fa4eca5f9760cbc7c95874e485c7f336248",
+			"repo": "https://github.com/jeanp413/open-remote-ssh",
+			"vsix": "build/builtin-extensions/open-remote-ssh-0.6.2.vsix",
+			"clientOnly": true,
+			"metadata": {
+				"id": "9fc16cea-08e2-4ae5-bf75-224004d722ff",
+				"publisherId": {
+					"publisherId": "82e59b79-acc5-4a5b-81cb-9303cbdc05cb",
+					"publisherName": "jeanp413",
+					"displayName": "jeanp413",
+					"flags": ""
+				},
+				"publisherDisplayName": "jeanp413"
+			}
+		},
 		{
 			"name": "ms-vscode.js-debug-companion",
 			"version": "1.1.3",
