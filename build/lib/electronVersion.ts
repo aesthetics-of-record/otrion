@@ -47,6 +47,11 @@ export function shouldDownloadElectron(repoRoot = root, environment: NodeJS.Proc
 			return true;
 		}
 		fs.accessSync(executable, platform === 'win32' ? fs.constants.F_OK : fs.constants.X_OK);
+		if (platform === 'darwin') {
+			const resources = path.join(electronDir, `${product.nameLong}.app`, 'Contents', 'Resources');
+			const catalog = fs.readFileSync(path.join(repoRoot, 'resources', 'darwin', 'Assets.car'));
+			return !catalog.equals(fs.readFileSync(path.join(resources, 'Assets.car')));
+		}
 		return false;
 	} catch {
 		return true;

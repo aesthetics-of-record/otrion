@@ -161,6 +161,7 @@ export const config = {
 	copyright: 'Copyright (c) Microsoft Corporation and Otrion contributors',
 	darwinExecutable: product.nameShort,
 	darwinIcon: 'resources/darwin/code.icns',
+	darwinAssetsCar: 'resources/darwin/Assets.car',
 	darwinBundleIdentifier: product.darwinBundleIdentifier,
 	darwinApplicationCategoryType: 'public.app-category.developer-tools',
 	darwinHelpBookFolder: 'VS Code HelpBook',
@@ -282,6 +283,13 @@ async function main(arch: string = process.arch): Promise<void> {
 	const electronPath = path.join(root, '.build', 'electron');
 	await util.rimraf(electronPath)();
 	await util.streamToPromise(getElectron(arch)());
+	if (process.platform === 'darwin') {
+		// The Electron archive carries fixed timestamps. Refresh the bundle metadata for Launch Services.
+		const appBundle = path.join(electronPath, `${product.nameLong}.app`);
+		const now = new Date();
+		await fs.promises.utimes(path.join(appBundle, 'Contents', 'Info.plist'), now, now);
+		await fs.promises.utimes(appBundle, now, now);
+	}
 }
 
 if (import.meta.main) {

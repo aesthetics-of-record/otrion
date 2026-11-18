@@ -1,0 +1,20 @@
+{
+  "fill": {
+    "solid": "extended-srgb:0.04314,0.11373,0.12157,1.00000"
+  },
+  "groups": [
+    {
+      "layers": [
+        {
+          "image-name": "Orbit.svg",
+          "name": "Orbit"
+        }
+      ]
+    }
+  ],
+  "supported-platforms": {
+    "squares": [
+      "macOS"
+    ]
+  }
+}
