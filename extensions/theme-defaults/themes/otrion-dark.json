@@ -1,6 +1,6 @@
 {
 	"$schema": "vscode://schemas/color-theme",
-	"name": "otrion-dark",
+	"name": "Otrion Dark",
 	"type": "dark",
 	"include": "./dark_plus.json",
 	"semanticHighlighting": true,

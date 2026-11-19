@@ -32,10 +32,10 @@
         "path": "./themes/otrion-dark.json"
       },
       {
-        "id": "otrion_light",
+        "id": "otrion-light",
         "label": "%otrionLightThemeLabel%",
         "uiTheme": "vs",
-        "path": "./themes/otrion_light.json"
+        "path": "./themes/otrion-light.json"
       },
       {
         "id": "Dark+",
