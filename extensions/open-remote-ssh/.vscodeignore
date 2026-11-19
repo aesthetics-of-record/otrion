@@ -1,0 +1,13 @@
+*
+*/**
+!dist/**/*.js
+!dist/**/*.LEGAL.txt
+!src/scripts/server-setup.sh
+!src/scripts/server-setup.ps1
+!src/native/askpass/askpass.sh
+!src/native/askpass/askpass.ps1
+!resources/icon.png
+!LICENSE.txt
+!README.md
+!CHANGELOG.md
+!package.json

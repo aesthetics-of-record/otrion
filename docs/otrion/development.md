@@ -25,7 +25,7 @@ A new Otrion profile opens directly in the editor. The product disables core tel
 
 ## Remote SSH
 
-Otrion Desktop bundles Open Remote - SSH. In the Command Palette, run `Remote-SSH: Connect to Host...` and select an SSH host or enter `user@host`. The extension reads your SSH configuration. The release VSIX, including its MIT license, is checked in under `build/builtin-extensions/`. Development launches and desktop packaging use the same version and SHA-256 from `product.json`. [Upstream release](https://github.com/jeanp413/open-remote-ssh/releases/tag/v0.6.2)
+Otrion Desktop bundles Open Remote - SSH. In the Command Palette, run `Remote-SSH: Connect to Host...` and select an SSH host or enter `user@host`. The extension reads your SSH configuration. Edit the built-in extension under `extensions/open-remote-ssh/`. Run `pnpm run gulp compile-extension:open-remote-ssh` from the repository root and reload the development window to try a change. The desktop build bundles the extension from the same sources. [Source layout and upstream revision](../../extensions/open-remote-ssh/README.md)
 
 ### Remote server for a desktop release
 

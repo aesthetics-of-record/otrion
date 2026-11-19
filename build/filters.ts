@@ -35,6 +35,8 @@ export const all = Object.freeze<string[]>([
 
 export const unicodeFilter = Object.freeze<string[]>([
 	'**',
+	// Preserve the upstream Open Remote - SSH source formatting and license headers.
+	'!extensions/open-remote-ssh/src/**',
 
 	'!**/ThirdPartyNotices.txt',
 	'!**/ThirdPartyNotices.cli.txt',
@@ -81,6 +83,8 @@ export const unicodeFilter = Object.freeze<string[]>([
 
 export const indentationFilter = Object.freeze<string[]>([
 	'**',
+	// Preserve the upstream Open Remote - SSH source formatting and license headers.
+	'!extensions/open-remote-ssh/src/**',
 
 	// except specific files
 	'!**/ThirdPartyNotices.txt',
@@ -176,6 +180,7 @@ export const indentationFilter = Object.freeze<string[]>([
 
 export const copyrightFilter = Object.freeze<string[]>([
 	'**',
+	'!extensions/open-remote-ssh/esbuild.mts',
 	'!**/*.desktop',
 	'!**/*.json',
 	'!**/*.jsonc',
