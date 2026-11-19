@@ -1,5 +1,6 @@
 import * as vscode from 'vscode';
 import * as fs from 'fs';
+import * as path from 'path';
 import { getRemoteAuthority } from './authResolver';
 import SSHConfiguration, { getSSHConfigPath } from './ssh/sshConfig';
 import { exists as fileExists } from './common/files';
@@ -73,40 +74,35 @@ export function openRemoteSSHLocationWindow(host: string, path: string, reuseWin
     vscode.commands.executeCommand('vscode.openFolder', vscode.Uri.from({ scheme: 'vscode-remote', authority: getRemoteAuthority(host), path }), { forceNewWindow: !reuseWindow });
 }
 
-export async function addNewHost() {
+async function getSSHConfigUri() {
     const sshConfigPath = getSSHConfigPath();
     if (!await fileExists(sshConfigPath)) {
-        await fs.promises.appendFile(sshConfigPath, '');
+        await fs.promises.mkdir(path.dirname(sshConfigPath), { recursive: true, mode: 0o700 });
+        await fs.promises.appendFile(sshConfigPath, '', { mode: 0o600 });
     }
+    return vscode.Uri.file(sshConfigPath);
+}
 
-    await vscode.commands.executeCommand('vscode.open', vscode.Uri.file(sshConfigPath), { preview: false });
-
-    const textEditor = vscode.window.activeTextEditor;
-    if (textEditor?.document.uri.fsPath !== sshConfigPath) {
-        return;
-    }
-
+export async function addNewHost() {
+    const textEditor = await vscode.window.showTextDocument(await getSSHConfigUri(), { preview: false });
     const textDocument = textEditor.document;
     const lastLine = textDocument.lineAt(textDocument.lineCount - 1);
-
-    if (!lastLine.isEmptyOrWhitespace) {
-        await textEditor.edit((editBuilder: vscode.TextEditorEdit) => {
-            editBuilder.insert(lastLine.range.end, '\n');
-        });
-    }
-
-    const snippet = '\nHost ${1:dev}\n\tHostName ${2:dev.example.com}\n\tUser ${3:john}';
-
-    await textEditor.insertSnippet(
-        new vscode.SnippetString(snippet),
-        new vscode.Position(textDocument.lineCount, 0)
-    );
+    const separator = lastLine.text.length ? '\n\n' : lastLine.lineNumber ? '\n' : '';
+    const snippet = [
+        '# # Example Host (uncomment to use)',
+        '# Host ${1:dev}',
+        '# \tHostName ${2:dev.example.com}',
+        '# \tUser ${3:john}',
+        '# \tPort ${4:22}',
+        ''
+    ].join('\n');
+    await textEditor.insertSnippet(new vscode.SnippetString(separator + snippet), lastLine.range.end, {
+        keepWhitespace: true,
+        undoStopBefore: true,
+        undoStopAfter: true
+    });
 }
 
 export async function openSSHConfigFile() {
-    const sshConfigPath = getSSHConfigPath();
-    if (!await fileExists(sshConfigPath)) {
-        await fs.promises.appendFile(sshConfigPath, '');
-    }
-    vscode.commands.executeCommand('vscode.open', vscode.Uri.file(sshConfigPath));
+    await vscode.commands.executeCommand('vscode.open', await getSSHConfigUri());
 }
