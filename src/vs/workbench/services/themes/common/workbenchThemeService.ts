@@ -56,6 +56,7 @@ export namespace ThemeSettingDefaults {
  */
 export function migrateThemeSettingsId(settingsId: string): string {
 	switch (settingsId) {
+		case 'otrion_light': return 'otrion-light';
 		case 'Default Dark Modern': return 'Dark Modern';
 		case 'Default Light Modern': return 'Light Modern';
 		case 'Default Dark+': return 'Dark+';

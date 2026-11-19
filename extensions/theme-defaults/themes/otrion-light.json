@@ -1,6 +1,6 @@
 {
 	"$schema": "vscode://schemas/color-theme",
-	"name": "otrion_light",
+	"name": "Otrion Light",
 	"type": "light",
 	"include": "./light_plus.json",
 	"semanticHighlighting": true,
