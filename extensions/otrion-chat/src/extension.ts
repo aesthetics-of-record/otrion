@@ -7,12 +7,14 @@ import { SessionHistory } from './history';
 import { registerSettings } from './settings';
 import { chatHtml } from './chatHtml';
 import { createSession, type SessionRecord } from './chatSession';
+import { registerThemeGuide } from './themeGuide';
 
 export function activate(context: vscode.ExtensionContext) {
 	const media = vscode.Uri.joinPath(context.extensionUri, 'media');
 	const scripts = vscode.Uri.joinPath(context.extensionUri, 'out', 'webview');
 	const store = new AgentStore(vscode.Uri.joinPath(context.globalStorageUri, 'agents').fsPath, context.secrets);
 	registerSettings(context, store);
+	registerThemeGuide(context);
 	const history = new SessionHistory(context, store);
 	const recent = new SessionHistory(context, store);
 	context.subscriptions.push(history, recent);
