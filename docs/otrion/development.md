@@ -38,7 +38,7 @@ pnpm run gulp vscode-reh-linux-x64-min
 tar -czf otrion-reh-linux-x64.tar.gz -C .. vscode-reh-linux-x64
 ```
 
-Attach the archive to an Otrion GitHub release tagged `ssh-<full-desktop-commit>`. Keep the top-level directory in the archive because the installer strips it when extracting. For private builds, set `remote.SSH.serverDownloadUrlTemplate` in User Settings to your own artifact endpoint. The remote installation uses `~/.otrion-server`. Open Remote - SSH keeps its default strict commit validation.
+Attach the archive to an Otrion GitHub release tagged `v0.1.0` alongside the desktop downloads. Keep the top-level directory in the archive because the installer strips it when extracting. For private builds, set `remote.SSH.serverDownloadUrlTemplate` in User Settings to your own artifact endpoint. The remote installation uses `~/.otrion-server`. Open Remote - SSH keeps its default strict commit validation.
 
 ## Set up Codex and Claude Code
 

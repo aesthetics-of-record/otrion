@@ -9,7 +9,6 @@ import { gulp } from './lib/gulp/facade.ts';
 import * as path from 'path';
 import rcedit from 'rcedit';
 import vfs from 'vinyl-fs';
-import pkg from '../package.json' with { type: 'json' };
 import product from '../product.json' with { type: 'json' };
 import { getVersion } from './lib/getVersion.ts';
 import * as task from './lib/gulp/task.ts';
@@ -85,8 +84,8 @@ function buildWin32Setup(arch: string, target: string): task.CallbackTask {
 			NameLong: product.nameLong,
 			NameShort: product.nameShort,
 			DirName: product.win32DirName,
-			Version: pkg.version,
-			RawVersion: pkg.version.replace(/-\w+$/, ''),
+			Version: product.otrionVersion,
+			RawVersion: product.otrionVersion.replace(/-\w+$/, ''),
 			Commit: commit,
 			NameVersion: product.win32NameVersion + (target === 'user' ? ' (User)' : ''),
 			ExeBasename: product.nameShort,
