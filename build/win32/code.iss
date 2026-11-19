@@ -8,10 +8,10 @@
 AppId={#AppId}
 AppName={#NameLong}
 AppVerName={#NameVersion}
-AppPublisher=Microsoft Corporation
-AppPublisherURL=https://code.visualstudio.com/
-AppSupportURL=https://code.visualstudio.com/
-AppUpdatesURL=https://code.visualstudio.com/
+AppPublisher=Otrion contributors
+AppPublisherURL=https://github.com/aesthetics-of-record/otrion
+AppSupportURL=https://github.com/aesthetics-of-record/otrion/issues
+AppUpdatesURL=https://github.com/aesthetics-of-record/otrion/releases
 DefaultGroupName={#NameLong}
 AllowNoIcons=yes
 OutputDir={#OutputDir}
