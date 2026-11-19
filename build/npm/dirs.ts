@@ -49,6 +49,7 @@ export const workspaceMembers = [
 	'extensions/microsoft-authentication',
 	'extensions/notebook-renderers',
 	'extensions/npm',
+	'extensions/open-remote-ssh',
 	'extensions/php-language-features',
 	'extensions/references-view',
 	'extensions/search-result',
