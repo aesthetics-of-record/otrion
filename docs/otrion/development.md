@@ -1,6 +1,6 @@
 # Otrion development guide
 
-Otrion's `main` branch started at Microsoft's Code - OSS release tag `1.147.0`. The repository includes the upstream license and third-party notices in `LICENSE.txt` and `ThirdPartyNotices.txt`. The Otrion Context extension uses the MIT license.
+Otrion's `main` branch started at Microsoft's Code - OSS release tag `1.147.0`. The repository includes the upstream license and third-party notices in `LICENSE.txt` and `ThirdPartyNotices.txt`.
 
 ## Build and run on macOS
 
@@ -54,21 +54,14 @@ Open a trusted local folder and run `Otrion: Open Agent Chat` from the Command P
 
 Replies stream into the sidebar. **Stop** interrupts the current reply. **New chat**, switching agents, and reloading the window start a fresh conversation. Hiding the sidebar preserves the current conversation. Turning off an agent’s permission in Otrion Settings ends its active session. Otrion does not approve ACP tool permission requests on the user’s behalf.
 
-## Try the Otrion Context extension
-
-Select a few lines of code, open the Command Palette (⌘⇧P on macOS), and run `Otrion: Copy Selection with File Path`. Paste into a new document to see the file path, line range, and selected code. If you select multiple ranges, the command copies each excerpt with its own location.
-
 ## Where to add code
 
 | Location | Purpose |
 | --- | --- |
 | `extensions/otrion-chat/` | The agent settings page, chat sidebar, and shared ACP client. The desktop build compiles its TypeScript sources. |
-| `extensions/otrion-context/` | A working built-in extension. Its manifest declares the command, and the extension host loads `extension.js` when the command runs. |
 | `extensions/otrion-*/` | Add product features as extensions. For example, a model provider can live in its own extension, and a chat interface can use the VS Code Chat API. If an extension gains package dependencies, register it in the root `pnpm-workspace.yaml` and update the lockfile. |
 | `product.json` | Configure the application name, data directories, URL scheme, and platform-specific application identifiers. |
 | `src/vs/workbench/contrib/` | Add workbench UI that requires changes to the editor shell. Keep core changes in feature-specific commits so they are easier to review during upstream merges. |
-
-The sample extension has no runtime package dependencies or separate compile step. After editing its code, run `Developer: Reload Window` in the development window to load your changes.
 
 ## Git remotes and upstream updates
 
@@ -90,6 +83,6 @@ git switch -c "sync/vscode-$tag"
 git merge --no-ff "$tag"
 ```
 
-If conflicts arise, preserve Otrion's product identifiers and incorporate new upstream settings. Stage the resolved files with `git add` and finish the merge with `git merge --continue`. Repeat the build steps with the Node.js and pnpm versions pinned by the new release. Launch Otrion and check the context command before updating the baseline version in the README and this guide and merging the sync branch into `main`.
+If conflicts arise, preserve Otrion's product identifiers and incorporate new upstream settings. Stage the resolved files with `git add` and finish the merge with `git merge --continue`. Repeat the build steps with the Node.js and pnpm versions pinned by the new release. Launch Otrion and open the Otrion Chat sidebar before updating the baseline version in the README and this guide and merging the sync branch into `main`.
 
 To review upstream development between releases, run `git fetch upstream main` followed by `git log --oneline HEAD..upstream/main`.
