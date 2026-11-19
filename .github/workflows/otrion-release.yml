@@ -21,6 +21,8 @@ jobs:
     runs-on: ${{ matrix.runner }}
     env:
       PNPM_CONFIG_FROZEN_LOCKFILE: 'true'
+      VSCODE_BUNDLE_SEQUENTIAL: '1'
+      GOMEMLIMIT: 2GiB
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -31,6 +33,24 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y libkrb5-dev libxkbfile-dev libsecret-1-dev libx11-dev libxfixes-dev libxkbcommon-dev libudev-dev libgtk-3-dev
+      - name: Cache the pinned ripgrep release for pnpm postinstall
+        shell: bash
+        run: |
+          case "$RUNNER_OS/$RUNNER_ARCH" in
+            macOS/ARM64) target=aarch64-apple-darwin.tar.gz; sha=2fa16464fd8638588a67c7fc172d3c4b57fbdc65dff366e10b0b0e90734628a6 ;;
+            macOS/X64) target=x86_64-apple-darwin.tar.gz; sha=591c693e80bb444ef1907b2a906feb9c77bcafe1cdf509107cc75dcf0e875bd2 ;;
+            Windows/ARM64) target=aarch64-pc-windows-msvc.zip; sha=cc36bae403f25c838d25a3c65ba64f38cc00904652e89d6377b5ceaf66df8432 ;;
+            Windows/X64) target=x86_64-pc-windows-msvc.zip; sha=bd28761f4918ea8fcb7a95f636b4422a915d55af268d9805be82d8ce0fdfc823 ;;
+            Linux/ARM64) target=aarch64-unknown-linux-musl.tar.gz; sha=dd3738a4b6e8df0fb3bc3edc5af352c4c39e0d97ad118a23e5176bdc5d48ba08 ;;
+            Linux/X64) target=x86_64-unknown-linux-musl.tar.gz; sha=4499958bfd5252df3d9e7504127fd448e4a14fbf2805ef4f14baaa1bcf775188 ;;
+            *) exit 1 ;;
+          esac
+          cache="$(node -p "require('os').tmpdir().split(require('path').sep).join('/')")/vscode-ripgrep-cache-1.17.1"
+          mkdir -p "$cache"
+          cd "$cache"
+          asset="ripgrep-v15.0.1-$target"
+          curl --fail --location --retry 3 -o "$asset" "https://github.com/microsoft/ripgrep-prebuilt/releases/download/v15.0.1/$asset"
+          node -e 'const [file, sha] = process.argv.slice(1); require("assert").strictEqual(require("crypto").createHash("sha256").update(require("fs").readFileSync(file)).digest("hex"), sha)' "$asset" "$sha"
       - name: Install project dependencies
         shell: bash
         run: |

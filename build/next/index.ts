@@ -572,7 +572,7 @@ async function bundleToOutput(outDir: string, doMinify: boolean, doNls: boolean,
 
 		buildResults.push({ outPath, result });
 	};
-	if (mobile) {
+	if (mobile || process.env.VSCODE_BUNDLE_SEQUENTIAL === '1') {
 		for (const entryPoint of allEntryPoints) {
 			await bundleEntryPoint(entryPoint);
 		}
