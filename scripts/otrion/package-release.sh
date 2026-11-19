@@ -20,11 +20,14 @@ verify_product() {
   ' "$1"
 }
 
+pnpm exec tsc -p extensions/otrion-chat
 pnpm run gulp "vscode-$platform-$arch-min"
 app="../VSCode-$platform-$arch"
 case "$platform" in
   darwin)
     verify_product "$app/Otrion.app/Contents/Resources/app/product.json"
+    codesign --force --deep --sign - "$app/Otrion.app"
+    codesign --verify --deep --strict "$app/Otrion.app"
     ditto -c -k --keepParent "$app/Otrion.app" "$out/Otrion-$version-macos-$arch.zip"
     ;;
   win32)

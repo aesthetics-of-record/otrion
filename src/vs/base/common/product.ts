@@ -97,6 +97,7 @@ export interface IDictationRuntimeProductConfig {
 }
 
 export interface IProductConfiguration {
+	readonly otrionVersion?: string;
 	readonly version: string;
 	readonly date?: string;
 	readonly quality?: string;

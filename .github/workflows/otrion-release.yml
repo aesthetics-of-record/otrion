@@ -5,6 +5,10 @@ on:
     branches: [feat/release-0.1.0]
     tags: ['v[0-9]*']
 
+concurrency:
+  group: otrion-packages-${{ github.ref }}
+  cancel-in-progress: true
+
 permissions:
   contents: read
 
@@ -15,6 +19,8 @@ jobs:
       matrix:
         runner: [macos-15, macos-15-intel, windows-2022, windows-11-arm, ubuntu-24.04, ubuntu-24.04-arm]
     runs-on: ${{ matrix.runner }}
+    env:
+      PNPM_CONFIG_FROZEN_LOCKFILE: 'true'
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
