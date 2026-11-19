@@ -32,6 +32,7 @@ import { AuxiliaryBarMaximizedContext } from '../../../common/contextkeys.js';
 import { mainWindow } from '../../../../base/browser/window.js';
 import { getActiveElement } from '../../../../base/browser/dom.js';
 import { isWeb } from '../../../../base/common/platform.js';
+import { IExtensionService } from '../../../services/extensions/common/extensions.js';
 import { IOnboardingService } from '../../welcomeOnboarding/common/onboardingService.js';
 import { ONBOARDING_STORAGE_KEY } from '../../welcomeOnboarding/common/onboardingTypes.js';
 import { IChatEntitlementService } from '../../../services/chat/common/chatEntitlementService.js';
@@ -95,6 +96,7 @@ export class StartupPageRunnerContribution extends Disposable implements IWorkbe
 		@IStorageService private readonly storageService: IStorageService,
 		@INotificationService private readonly notificationService: INotificationService,
 		@IContextKeyService private readonly contextKeyService: IContextKeyService,
+		@IExtensionService private readonly extensionService: IExtensionService,
 		@IOnboardingService private readonly onboardingService: IOnboardingService,
 		@IChatEntitlementService private readonly chatEntitlementService: IChatEntitlementService,
 	) {
@@ -114,6 +116,15 @@ export class StartupPageRunnerContribution extends Disposable implements IWorkbe
 
 		// Wait for resolving startup editor until we are restored to reduce startup pressure
 		await this.lifecycleService.when(LifecyclePhase.Restored);
+
+		if (!isWeb && !this.environmentService.skipWelcome && !this.environmentService.extensionTestsLocationURI
+			&& this.storageService.isNew(StorageScope.APPLICATION)
+			&& !this.storageService.getBoolean('otrion.themeGuideShown', StorageScope.APPLICATION)) {
+			await this.extensionService.whenInstalledExtensionsRegistered();
+			await this.commandService.executeCommand('otrion.showThemeGuide');
+			this.storageService.store('otrion.themeGuideShown', true, StorageScope.APPLICATION, StorageTarget.MACHINE);
+			return;
+		}
 
 		if (AuxiliaryBarMaximizedContext.getValue(this.contextKeyService)) {
 			// If the auxiliary bar is maximized, we do not show the welcome page.

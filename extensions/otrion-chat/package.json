@@ -52,6 +52,11 @@
 		},
 		"commands": [
 			{
+				"command": "otrion.showThemeGuide",
+				"category": "Otrion",
+				"title": "Open Theme Guide"
+			},
+			{
 				"command": "otrion.chat.open",
 				"category": "Otrion",
 				"title": "%openChat%"

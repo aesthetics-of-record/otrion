@@ -21,7 +21,7 @@ Run `pnpm run build-fast` for incremental development builds or `pnpm run compil
 
 ## Desktop defaults
 
-A new Otrion profile opens directly in the editor. The product disables core telemetry in development and packaged builds, turns off automatic crash reporting and experiments, and ships without the built-in Copilot Chat extension. The `defaultChatAgent.enabled` switch in `product.json` controls the bundled provider. The authentication API remains available to extensions that need a user-selected account. Third-party extensions can make their own network requests.
+On the first desktop launch, Otrion starts in Otrion Dark and opens a theme guide with screenshots of the editor. Select any theme card to apply it immediately. Switch between cards to compare themes, then select **Done** to close the guide. Later launches open directly in the editor. To reopen the guide, run **Otrion: Open Theme Guide** from the Command Palette. Use **Preferences: Color Theme** to change the selection later. The product disables core telemetry in development and packaged builds, turns off automatic crash reporting and experiments, and ships without the built-in Copilot Chat extension. The `defaultChatAgent.enabled` switch in `product.json` controls the bundled provider. The authentication API remains available to extensions that need a user-selected account. Third-party extensions can make their own network requests.
 
 ## Remote SSH
 
