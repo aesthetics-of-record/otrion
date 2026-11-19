@@ -32,6 +32,12 @@
         "path": "./themes/otrion-dark.json"
       },
       {
+        "id": "otrion_light",
+        "label": "%otrionLightThemeLabel%",
+        "uiTheme": "vs",
+        "path": "./themes/otrion_light.json"
+      },
+      {
         "id": "Dark+",
         "label": "%darkPlusColorThemeLabel%",
         "uiTheme": "vs-dark",
