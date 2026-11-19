@@ -34,6 +34,7 @@ packages:
   - extensions/notebook-renderers
   - extensions/npm
   - extensions/open-remote-ssh
+  - extensions/otrion-chat
   - extensions/php-language-features
   - extensions/references-view
   - extensions/search-result

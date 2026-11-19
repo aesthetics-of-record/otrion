@@ -907,7 +907,10 @@ MenuRegistry.appendMenuItem(MenuId.GlobalActivity, {
 	order: 7
 } satisfies ISubmenuItem);
 MenuRegistry.appendMenuItem(MenuId.MenubarPreferencesMenu, {
-	title: localize({ key: 'miSelectTheme', comment: ['&& denotes a mnemonic'] }, "&&Themes"),
+	title: {
+		...localize2('themes', "Themes"),
+		mnemonicTitle: localize({ key: 'miSelectTheme', comment: ['&& denotes a mnemonic'] }, "&&Themes")
+	},
 	submenu: ThemesSubMenu,
 	group: '2_configuration',
 	order: 7

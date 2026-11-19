@@ -13,6 +13,7 @@ import { FilterType, SortBy } from './extensionManagement.js';
 type ExtensionGalleryConfig = {
 	readonly serviceUrl: string;
 	readonly itemUrl: string;
+	readonly allPublicRepositorySigned?: boolean;
 	readonly publisherUrl: string;
 	readonly resourceUrlTemplate: string;
 	readonly extensionUrlTemplate: string;
@@ -38,8 +39,8 @@ export class ExtensionGalleryManifestService extends Disposable implements IExte
 		super();
 	}
 
-	async getExtensionGalleryManifest(): Promise<IExtensionGalleryManifest | null> {
-		const extensionsGallery = this.productService.extensionsGallery as ExtensionGalleryConfig | undefined;
+	async getExtensionGalleryManifest(endpoints?: { serviceUrl: string; itemUrl: string }): Promise<IExtensionGalleryManifest | null> {
+		const extensionsGallery = (endpoints ?? this.productService.extensionsGallery) as ExtensionGalleryConfig | undefined;
 		if (!extensionsGallery?.serviceUrl) {
 			return null;
 		}
@@ -223,7 +224,7 @@ export class ExtensionGalleryManifestService extends Disposable implements IExte
 					flags,
 				},
 				signing: {
-					allPublicRepositorySigned: true,
+					allPublicRepositorySigned: !endpoints && (extensionsGallery.allPublicRepositorySigned ?? true),
 				}
 			}
 		};

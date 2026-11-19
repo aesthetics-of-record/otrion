@@ -1869,6 +1869,21 @@ importers:
         specifier: 0.1.13
         version: 0.1.13
 
+  extensions/otrion-chat:
+    devDependencies:
+      '@types/markdown-it':
+        specifier: ^14.1.2
+        version: 14.1.2
+      diff:
+        specifier: 8.0.3
+        version: 8.0.3
+      highlight.js:
+        specifier: ^11.8.0
+        version: 11.11.1
+      markdown-it:
+        specifier: ^14.2.0
+        version: 14.3.3
+
   extensions/php-language-features:
     dependencies:
       which:

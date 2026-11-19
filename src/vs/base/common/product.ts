@@ -145,6 +145,8 @@ export interface IProductConfiguration {
 	};
 
 	readonly extensionsGallery?: {
+		readonly itemUrl?: string;
+		readonly allPublicRepositorySigned?: boolean;
 		readonly serviceUrl: string;
 		readonly controlUrl: string;
 		readonly extensionUrlTemplate: string;
