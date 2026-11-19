@@ -4,6 +4,10 @@
  *--------------------------------------------------------------------------------------------*/
 
 import './media/auxiliaryBarPart.css';
+import { $, addDisposableListener, getWindow } from '../../../../base/browser/dom.js';
+import { StandardMouseEvent } from '../../../../base/browser/mouseEvent.js';
+import { URI } from '../../../../base/common/uri.js';
+import { CodeDataTransfers } from '../../../../platform/dnd/browser/dnd.js';
 import { localize } from '../../../../nls.js';
 import { IContextKeyService } from '../../../../platform/contextkey/common/contextkey.js';
 import { IContextMenuService } from '../../../../platform/contextview/browser/contextView.js';
@@ -147,6 +151,100 @@ export class AuxiliaryBarPart extends AbstractPaneCompositePart {
 				this.onDidChangeActivityBarLocation();
 			}
 		}));
+	}
+
+	protected override createTitleArea(parent: HTMLElement): HTMLElement | undefined {
+		const area = super.createTitleArea(parent);
+		if (!area) { return area; }
+		const strip = $('.otrion-session-tabs');
+		strip.setAttribute('aria-label', localize('otrionSessionTabs', "Chat sessions"));
+		area.prepend(strip);
+		const key = 'otrion.chat.tabs';
+		const keys = new Set([key]);
+		const getTabs = () => this.contextKeyService.getContextKeyValue<{ id: string; title: string; agent: string; active: boolean; saved: boolean }[]>(key) ?? [];
+		let selected: string | undefined;
+		const render = () => {
+			const tabs = getTabs();
+			const offset = strip.scrollLeft;
+			const focused = (strip.ownerDocument.activeElement as HTMLElement | null)?.dataset.session;
+			strip.replaceChildren();
+			for (const tab of tabs) {
+				const item = $('.otrion-session-tab');
+				item.classList.toggle('selected', tab.active);
+				const button = document.createElement('button');
+				const label = $('span');
+				label.textContent = tab.title;
+				button.append(label);
+				button.draggable = true;
+				button.title = tab.agent + ' · ' + tab.title;
+				button.dataset.session = tab.id;
+				button.setAttribute('aria-pressed', String(tab.active));
+				item.append(button);
+				strip.append(item);
+			}
+			strip.scrollLeft = offset;
+			if (focused) { strip.querySelector<HTMLElement>(`[data-session="${CSS.escape(focused)}"]`)?.focus({ preventScroll: true }); }
+			const next = tabs.find(tab => tab.active)?.id;
+			if (selected !== next) { strip.querySelector('.selected')?.scrollIntoView({ block: 'nearest', inline: 'nearest' }); }
+			selected = next;
+		};
+		const sessionButton = (event: Event) => (event.target as HTMLElement).closest<HTMLButtonElement>('button[data-session]');
+		this._register(addDisposableListener(strip, 'click', event => {
+			const id = sessionButton(event)?.dataset.session;
+			if (id) { void this.commandService.executeCommand('otrion.chat.activateTab', id); }
+		}));
+		this._register(addDisposableListener(strip, 'auxclick', event => {
+			const id = sessionButton(event)?.dataset.session;
+			if (event.button === 1 && id) { event.preventDefault(); void this.commandService.executeCommand('otrion.chat.closeTab', id); }
+		}));
+		this._register(addDisposableListener(strip, 'wheel', (event: WheelEvent) => {
+			if (event.ctrlKey || event.deltaX || !event.deltaY || strip.scrollWidth <= strip.clientWidth) { return; }
+			event.preventDefault();
+			const scale = event.deltaMode === 1 ? 16 : event.deltaMode === 2 ? strip.clientWidth : 1;
+			strip.scrollLeft += event.deltaY * scale;
+		}, { passive: false }));
+		this._register(addDisposableListener(strip, 'dragstart', event => {
+			const id = sessionButton(event)?.dataset.session;
+			if (!id || !event.dataTransfer) { return; }
+			const resource = URI.from({ scheme: 'otrion-session', path: '/' + id });
+			event.dataTransfer.effectAllowed = 'copyMove';
+			event.dataTransfer.setData(CodeDataTransfers.EDITORS, JSON.stringify([{ resource, options: { override: 'otrion.chat.session', pinned: true } }]));
+			event.stopPropagation();
+		}));
+		const showTabMenu = (button: HTMLButtonElement, anchor: StandardMouseEvent | HTMLElement) => {
+			const tabs = getTabs();
+			const id = button.dataset.session!;
+			const index = tabs.findIndex(tab => tab.id === id);
+			if (index < 0) { return; }
+			const action = (mode: string, label: string, enabled = true) => toAction({
+				id: 'otrion.chat.close.' + mode, label, enabled, run: () => this.commandService.executeCommand('otrion.chat.closeTab', id, mode)
+			});
+			this.contextMenuService.showContextMenu({ getAnchor: () => anchor, getActions: () => [
+				action('one', localize('otrionCloseTab', "Close")),
+				action('others', localize('otrionCloseOthers', "Close Others"), tabs.length > 1),
+				action('right', localize('otrionCloseRight', "Close to the Right"), index < tabs.length - 1),
+				action('saved', localize('otrionCloseSaved', "Close Saved"), tabs.some(tab => tab.saved)),
+				action('all', localize('otrionCloseAll', "Close All")),
+			] });
+		};
+		this._register(addDisposableListener(strip, 'contextmenu', event => {
+			const button = sessionButton(event);
+			if (!button) { return; }
+			event.preventDefault();
+			event.stopPropagation();
+			showTabMenu(button, new StandardMouseEvent(getWindow(strip), event));
+		}));
+		this._register(addDisposableListener(strip, 'keydown', event => {
+			const button = sessionButton(event);
+			if (button && (event.key === 'ContextMenu' || (event.shiftKey && event.key === 'F10'))) {
+				event.preventDefault();
+				event.stopPropagation();
+				showTabMenu(button, button);
+			}
+		}));
+		this._register(this.contextKeyService.onDidChangeContext(e => { if (e.affectsSome(keys)) { render(); } }));
+		render();
+		return area;
 	}
 
 	private onDidChangeAutoHideViewContainers(e: { before: number; after: number }): void {

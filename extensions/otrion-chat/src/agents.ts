@@ -39,7 +39,75 @@ async function executable(name: string) {
 }
 
 export class AgentStore {
-	constructor(private readonly root: string) {}
+	constructor(private readonly root: string, private readonly secrets: vscode.SecretStorage) {}
+
+	private authKey(id: AgentId) { return 'agent-auth.' + id; }
+
+	onAuthChange(listener: (id: AgentId) => void) {
+		return this.secrets.onDidChange(({ key }) => {
+			for (const id of ['codex', 'claude'] as const) {
+				if (key === this.authKey(id)) { listener(id); }
+			}
+		});
+	}
+
+	private async credentials(id: AgentId): Promise<{ mode: 'cli' | 'key'; key?: string }> {
+		const saved = await this.secrets.get(this.authKey(id));
+		return saved ? JSON.parse(saved) : { mode: 'cli' };
+	}
+
+	async authChoice(id: AgentId) {
+		const { mode, key } = await this.credentials(id);
+		return { mode, hasKey: !!key };
+	}
+
+	async changeAuth(id: AgentId, action: 'cli' | 'key' | 'replaceKey' | 'removeKey') {
+		const auth = await this.credentials(id);
+		if (action === 'cli') {
+			auth.mode = 'cli';
+		} else if (action === 'removeKey') {
+			delete auth.key;
+		} else {
+			if (!auth.key || action === 'replaceKey') {
+				const provider = id === 'codex' ? 'OpenAI' : 'Anthropic';
+				const key = await vscode.window.showInputBox({
+					title: provider + ' API key', password: true, ignoreFocusOut: true,
+					prompt: 'Store your key in Otrion’s protected credential storage.',
+					validateInput: value => /^\S+$/.test(value.trim()) ? undefined : 'Enter an API key without spaces.'
+				});
+				if (!key?.trim()) { return; }
+				auth.key = key.trim();
+			}
+			auth.mode = 'key';
+		}
+		await this.secrets.store(this.authKey(id), JSON.stringify(auth));
+	}
+
+	async agentEnvironment(id: AgentId): Promise<NodeJS.ProcessEnv> {
+		const { mode, key } = await this.credentials(id);
+		const env = { ...process.env };
+		if (mode === 'cli') { return env; }
+		if (!key) { throw new Error('Add an API key or choose CLI account in Otrion Settings.'); }
+		if (id === 'claude') {
+			for (const name of ['ANTHROPIC_AUTH_TOKEN', 'CLAUDE_CODE_OAUTH_TOKEN', 'ANTHROPIC_CUSTOM_HEADERS', 'CLAUDE_CODE_USE_BEDROCK', 'CLAUDE_CODE_USE_VERTEX', 'CLAUDE_CODE_USE_FOUNDRY']) { delete env[name]; }
+			env.ANTHROPIC_BASE_URL = 'https://api.anthropic.com';
+			env.ANTHROPIC_API_KEY = key;
+		} else {
+			// Use the adapter's session provider override to preserve the CLI's saved account.
+			const provider = 'otrion_openai';
+			let config;
+			try { config = env.CODEX_CONFIG ? JSON.parse(env.CODEX_CONFIG) : {}; }
+			catch { throw new Error('CODEX_CONFIG must contain a valid JSON object.'); }
+			if (!config || typeof config !== 'object' || Array.isArray(config)) { throw new Error('CODEX_CONFIG must contain a JSON object.'); }
+			delete env.DEFAULT_AUTH_REQUEST;
+			env.MODEL_PROVIDER = provider;
+			env.OTRION_OPENAI_API_KEY = key;
+			env.CODEX_CONFIG = JSON.stringify({ ...config, model_provider: provider, model_providers: {
+				...config.model_providers, [provider]: { name: 'OpenAI', base_url: 'https://api.openai.com/v1', wire_api: 'responses', env_key: 'OTRION_OPENAI_API_KEY' }
+			} });
+		}
+		return env;
+	}
 
 	private directory(id: AgentId) {
 		return path.join(this.root, id + '-' + agents[id].version);
@@ -68,23 +136,45 @@ export class AgentStore {
 		return command ? { command, args: [] as string[], source: 'External installation' } : undefined;
 	}
 
+	private async authCommand(id: AgentId, launch: NonNullable<Awaited<ReturnType<AgentStore['launch']>>>) {
+		if (id === 'claude') { return { command: launch.command, args: [...launch.args, '--cli', 'auth'] }; }
+		if (launch.args.length) {
+			const cli = createRequire(launch.args[0]).resolve('@openai/codex/bin/codex.js');
+			return { command: launch.command, args: [cli, 'login'] };
+		}
+		const command = await executable('codex');
+		if (!command) { throw new Error('Install the Codex CLI or the Otrion-managed adapter.'); }
+		return { command, args: ['login'] };
+	}
+
+	async authStatus(id: AgentId, launch: NonNullable<Awaited<ReturnType<AgentStore['launch']>>>) {
+		let output: string;
+		try {
+			const cli = await this.authCommand(id, launch);
+			const args = [...cli.args, 'status'];
+			if (id === 'claude') { args.push('--json'); }
+			const result = await promisify(execFile)(cli.command, args, { cwd: homedir(), timeout: 5000, maxBuffer: 65536, windowsHide: true });
+			output = id === 'claude' ? result.stdout : result.stdout + result.stderr;
+		} catch (error) {
+			if (error.code !== 1) { return 'Unknown'; }
+			output = id === 'claude' ? error.stdout ?? '' : (error.stdout ?? '') + (error.stderr ?? '');
+		}
+		if (id === 'codex') {
+			if (/not logged in/i.test(output)) { return 'Signed out'; }
+			return /logged in/i.test(output) ? 'Signed in' : 'Unknown';
+		}
+		try {
+			const { loggedIn } = JSON.parse(output);
+			return loggedIn === true ? 'Signed in' : loggedIn === false ? 'Signed out' : 'Unknown';
+		} catch { return 'Unknown'; }
+	}
+
 	async signIn(id: AgentId) {
 		const launch = await this.launch(id);
 		if (!launch || !allowed(id)) { throw new Error('Install and allow this agent first.'); }
-		let command = launch.command;
-		let args = [...launch.args, '--cli', 'auth', 'login'];
-		if (id === 'codex') {
-			if (launch.args.length) {
-				const cli = createRequire(launch.args[0]).resolve('@openai/codex/bin/codex.js');
-				args = [cli, 'login'];
-			} else {
-				const codex = await executable('codex');
-				if (!codex) { throw new Error('Run codex login in your terminal, or install the Otrion-managed adapter.'); }
-				command = codex;
-				args = ['login'];
-			}
-		}
-		vscode.window.createTerminal({ name: agents[id].name + ' Sign In', shellPath: command, shellArgs: args, cwd: homedir() }).show();
+		const cli = await this.authCommand(id, launch);
+		const args = id === 'claude' ? [...cli.args, 'login'] : cli.args;
+		vscode.window.createTerminal({ name: agents[id].name + ' Sign In', shellPath: cli.command, shellArgs: args, cwd: homedir() }).show();
 	}
 
 	async install(id: AgentId) {

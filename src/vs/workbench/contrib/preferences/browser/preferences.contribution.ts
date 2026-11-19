@@ -3,6 +3,10 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
+import './otrionFileIcons.js';
+import { Codicon } from '../../../../base/common/codicons.js';
+import { builtinExtensionsPath, FileAccess } from '../../../../base/common/network.js';
+import { IViewsService } from '../../../services/views/common/viewsService.js';
 import { KeyChord, KeyCode, KeyMod } from '../../../../base/common/keyCodes.js';
 import { Disposable, DisposableStore, MutableDisposable } from '../../../../base/common/lifecycle.js';
 import { Schemas } from '../../../../base/common/network.js';
@@ -29,7 +33,7 @@ import { IWorkspaceContextService, IWorkspaceFolder, WorkbenchState } from '../.
 import { PICK_WORKSPACE_FOLDER_COMMAND_ID } from '../../../browser/actions/workspaceCommands.js';
 import { EditorPaneDescriptor, IEditorPaneRegistry } from '../../../browser/editor.js';
 import { resolveCommandsContext } from '../../../browser/parts/editor/editorCommandsContext.js';
-import { RemoteNameContext, ResourceContextKey, WorkbenchStateContext } from '../../../common/contextkeys.js';
+import { getVisbileViewContextKey, IsSessionsWindowContext, RemoteNameContext, ResourceContextKey, WorkbenchStateContext } from '../../../common/contextkeys.js';
 import { IWorkbenchContribution, WorkbenchPhase, registerWorkbenchContribution2 } from '../../../common/contributions.js';
 import { EditorExtensions, IEditorFactoryRegistry, IEditorSerializer } from '../../../common/editor.js';
 import { EditorInput } from '../../../common/editor/editorInput.js';
@@ -475,12 +479,7 @@ class PreferencesActionsContribution extends Disposable implements IWorkbenchCon
 			constructor() {
 				super({
 					id: SETTINGS_EDITOR_COMMAND_FILTER_ONLINE,
-					title: nls.localize({ key: 'miOpenOnlineSettings', comment: ['&& denotes a mnemonic'] }, "&&Online Services Settings"),
-					menu: {
-						id: MenuId.MenubarPreferencesMenu,
-						group: '3_settings',
-						order: 1,
-					}
+					title: nls.localize('openOnlineSettings', "Online Services Settings")
 				});
 			}
 			run(accessor: ServicesAccessor) {
@@ -1524,9 +1523,34 @@ registerEditorContribution(SettingsEditorContribution.ID, SettingsEditorContribu
 
 // Preferences menu
 
+const otrionDesktop = ContextKeyExpr.and(IsWebContext.toNegated(), IsSessionsWindowContext.negate());
+const otrionView = 'otrion.chat';
+const orbitIcon = FileAccess.asBrowserUri(`${builtinExtensionsPath}/otrion-chat/media/orbit.svg`);
+CommandsRegistry.registerCommand('otrion.chat.toggleSidebar', accessor => {
+	const views = accessor.get(IViewsService);
+	if (views.isViewVisible(otrionView)) {
+		views.closeView(otrionView);
+		return;
+	}
+	return views.openView(otrionView, true);
+});
+MenuRegistry.appendMenuItem(MenuId.TitleBarAdjacentCenter, {
+	command: {
+		id: 'otrion.chat.toggleSidebar',
+		title: nls.localize('toggleOtrionChat', "Toggle Otrion Chat"),
+		icon: { light: orbitIcon, dark: orbitIcon },
+		toggled: ContextKeyExpr.has(getVisbileViewContextKey(otrionView))
+	},
+	group: 'navigation', order: 0, when: otrionDesktop
+});
+MenuRegistry.appendMenuItem(MenuId.TitleBar, {
+	submenu: MenuId.MenubarPreferencesMenu, title: nls.localize('otrionTitleSettings', "Settings"),
+	icon: Codicon.gear, group: 'navigation', order: 100, when: otrionDesktop
+});
+
 MenuRegistry.appendMenuItem(MenuId.MenubarPreferencesMenu, {
 	command: { id: 'otrion.settings.open', title: nls.localize('otrionSettings', "Otrion Settings") },
-	group: '2_configuration',
+	group: '1_otrion',
 	order: 1,
 	when: IsWebContext.toNegated()
 });

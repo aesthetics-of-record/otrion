@@ -4,6 +4,8 @@
  *--------------------------------------------------------------------------------------------*/
 
 import { addDisposableListener, EventType, findParentWithClass, getWindow } from '../../../../base/browser/dom.js';
+import { DataTransfers } from '../../../../base/browser/dnd.js';
+import { CodeDataTransfers, containsDragType, extractEditorsDropData } from '../../../../platform/dnd/browser/dnd.js';
 import { CancellationTokenSource } from '../../../../base/common/cancellation.js';
 import { Emitter } from '../../../../base/common/event.js';
 import { DisposableStore, IDisposable, MutableDisposable, toDisposable } from '../../../../base/common/lifecycle.js';
@@ -191,6 +193,40 @@ export class WebviewViewPane extends ViewPane {
 		this._webviewDisposables.add(webview.onDidUpdateState(() => {
 			this.viewState[storageKeys.webviewState] = webview.state;
 		}));
+
+		// Desktop file paths are available in the workbench, outside the sandboxed chat iframe.
+		if (this.id === 'otrion.chat' && this.extensionId?.value === 'otrion.otrion-chat') {
+			const target = getWindow(this.element);
+			const accepts = (e: DragEvent) => e.composedPath().includes(webview.container) && containsDragType(e, DataTransfers.FILES, CodeDataTransfers.FILES, CodeDataTransfers.EDITORS, DataTransfers.RESOURCES);
+			let over = false;
+			const setOver = (value: boolean) => {
+				if (over !== value) {
+					over = value;
+					void webview.postMessage({ type: 'resourceDrag', over });
+				}
+			};
+			this._webviewDisposables.add(addDisposableListener(target, EventType.DRAG_LEAVE, e => {
+				if (over && !(e.relatedTarget instanceof target.Node && webview.container.contains(e.relatedTarget))) { setOver(false); }
+			}, true));
+			this._webviewDisposables.add(addDisposableListener(target, EventType.DRAG_END, () => setOver(false), true));
+			this._webviewDisposables.add(addDisposableListener(target, EventType.BLUR, () => setOver(false)));
+			this._webviewDisposables.add(addDisposableListener(target, EventType.DRAG_OVER, e => {
+				setOver(accepts(e));
+				if (over && e.dataTransfer) {
+					e.preventDefault();
+					e.dataTransfer.dropEffect = 'copy';
+				}
+			}, true));
+			this._webviewDisposables.add(addDisposableListener(target, EventType.DROP, e => {
+				setOver(false);
+				if (!accepts(e)) { return; }
+				const uris = extractEditorsDropData(e).flatMap(item => item.resource?.scheme === 'file' ? [item.resource.toString()] : []);
+				e.preventDefault();
+				e.stopPropagation();
+				webview.windowDidDragEnd();
+				if (uris.length) { void webview.postMessage({ type: 'droppedResources', uris }); }
+			}, true));
+		}
 
 		// Re-dispatch all drag events back to the drop target to support view drag drop
 		for (const event of [EventType.DRAG, EventType.DRAG_END, EventType.DRAG_ENTER, EventType.DRAG_LEAVE, EventType.DRAG_START]) {

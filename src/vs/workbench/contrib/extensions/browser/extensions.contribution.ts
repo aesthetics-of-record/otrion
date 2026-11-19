@@ -682,7 +682,10 @@ class ExtensionsContributions extends Disposable implements IWorkbenchContributi
 		this._register(MenuRegistry.appendMenuItem(MenuId.MenubarPreferencesMenu, {
 			command: {
 				id: VIEWLET_ID,
-				title: localize({ key: 'miPreferencesExtensions', comment: ['&& denotes a mnemonic'] }, "&&Extensions")
+				title: {
+					...localize2('extensions', "Extensions"),
+					mnemonicTitle: localize({ key: 'miPreferencesExtensions', comment: ['&& denotes a mnemonic'] }, "&&Extensions")
+				}
 			},
 			group: '2_configuration',
 			order: 3,

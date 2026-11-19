@@ -149,7 +149,18 @@ export class WorkbenchExtensionGalleryManifestService extends ExtensionGalleryMa
 			this._register(this.galleryAccountService.onDidChangeAccount(() => this.handleMarketplaceAccountAccess(configuredServiceUrl)));
 			await this.handleMarketplaceAccountAccess(configuredServiceUrl);
 		} else {
-			const defaultExtensionGalleryManifest = await super.getExtensionGalleryManifest();
+			const endpoints = this.configurationService.getValue<{ serviceUrl?: string; itemUrl?: string }>('otrion.marketplace');
+			const baseUrl = (value?: string) => {
+				if (typeof value !== 'string' || !URL.canParse(value)) { return; }
+				const url = new URL(value);
+				if (['http:', 'https:'].includes(url.protocol) && !url.username && !url.password && !url.search && !url.hash) {
+					return url.href.replace(/\/+$/, '');
+				}
+				return undefined;
+			};
+			const serviceUrl = baseUrl(endpoints?.serviceUrl);
+			const itemUrl = baseUrl(endpoints?.itemUrl);
+			const defaultExtensionGalleryManifest = await super.getExtensionGalleryManifest(serviceUrl && itemUrl ? { serviceUrl, itemUrl } : undefined);
 			this.update(defaultExtensionGalleryManifest);
 		}
 

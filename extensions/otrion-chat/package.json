@@ -18,7 +18,20 @@
 			"description": "Settings are available. Chat requires a trusted workspace."
 		}
 	},
+	"devDependencies": {
+		"@types/markdown-it": "^14.1.2",
+		"diff": "8.0.3",
+		"highlight.js": "^11.8.0",
+		"markdown-it": "^14.2.0"
+	},
 	"contributes": {
+		"customEditors": [
+			{
+				"viewType": "otrion.chat.session",
+				"displayName": "Otrion Chat",
+				"selector": [{ "filenamePattern": "otrion-session:/*" }]
+			}
+		],
 		"viewsContainers": {
 			"secondarySidebar": [
 				{
@@ -47,11 +60,49 @@
 				"command": "otrion.settings.open",
 				"category": "Preferences",
 				"title": "Otrion Settings"
+			},
+			{
+				"command": "otrion.chat.new",
+				"category": "Otrion",
+				"title": "New Session",
+				"icon": "$(add)"
+			},
+			{
+				"command": "otrion.chat.history",
+				"category": "Otrion",
+				"title": "Session History",
+				"icon": "$(history)"
 			}
 		],
 		"configuration": {
 			"title": "Otrion Chat",
 			"properties": {
+				"otrion.marketplace": {
+					"type": "object",
+					"scope": "application",
+					"additionalProperties": false,
+					"required": [
+						"serviceUrl",
+						"itemUrl"
+					],
+					"properties": {
+						"serviceUrl": {
+							"type": "string",
+							"format": "uri",
+							"pattern": "^https?://"
+						},
+						"itemUrl": {
+							"type": "string",
+							"format": "uri",
+							"pattern": "^https?://"
+						}
+					},
+					"default": {
+						"serviceUrl": "https://open-vsx.org/vscode/gallery",
+						"itemUrl": "https://open-vsx.org/vscode/item"
+					},
+					"description": "Extension marketplace endpoints. Reload the window after changing them."
+				},
 				"otrion.chat.codexAcpPath": {
 					"type": "string",
 					"default": "codex-acp",
@@ -77,6 +128,20 @@
 					"description": "Allow Otrion to start Claude Code for chat."
 				}
 			}
+		},
+		"menus": {
+			"view/title": [
+				{
+					"command": "otrion.chat.new",
+					"when": "view == otrion.chat",
+					"group": "navigation@1"
+				},
+				{
+					"command": "otrion.chat.history",
+					"when": "view == otrion.chat",
+					"group": "navigation@2"
+				}
+			]
 		}
 	}
 }
