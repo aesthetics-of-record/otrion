@@ -24,7 +24,7 @@ export function activate(context: vscode.ExtensionContext) {
 	const editors = new Map<string, vscode.WebviewPanel>();
 	const drafts = new Map<string, unknown[]>();
 	const sideIds = () => [...tabs.keys()].filter(id => !editors.has(id));
-	const isSaved = (id: string) => !drafts.get(id)?.length && !tabs.get(id)?.busy;
+	const isSaved = (id: string) => !drafts.get(id)?.length && !records.get(id)?.queue?.length && !tabs.get(id)?.busy;
 	let active = '';
 	let setupTab: string | undefined;
 	registerSettings(context, store, agent => {
@@ -272,6 +272,8 @@ export function activate(context: vscode.ExtensionContext) {
 				case 'attach':
 					void tab.attach(message.folder === true).then(parts => webview.postMessage({ type: 'insertResources', tabId: message.tabId, request: message.request, parts: parts ?? [] }));
 					break;
+				case 'sendQueued': void tab.sendQueued(message.id); break;
+				case 'discardQueued': tab.discardQueued(message.id); break;
 				case 'send': void tab.send(message.parts); break;
 				case 'stop': tab.stop(); break;
 			}
