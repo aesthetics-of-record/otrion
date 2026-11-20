@@ -48,6 +48,8 @@ export interface ICarouselSection {
 }
 
 export interface IImageCarouselCollection {
+	/** Show the attachment name and image controls above the preview. */
+	readonly attachmentLayout?: boolean;
 	readonly id: string;
 	readonly title: string;
 	readonly sections: ReadonlyArray<ICarouselSection>;
