@@ -8,14 +8,20 @@ fi
 : "${MACOS_CERTIFICATE_P12:?Missing Developer ID Application certificate}"
 : "${MACOS_CERTIFICATE_PASSWORD:?Missing certificate password}"
 export AGENT_TEMPDIRECTORY=$(mktemp -d)
-keychain="$AGENT_TEMPDIRECTORY/buildagent.keychain"
+keychain="$AGENT_TEMPDIRECTORY/buildagent.keychain-db"
 cleanup() {
   security delete-keychain "$keychain" >/dev/null 2>&1 || true
   rm -rf "$AGENT_TEMPDIRECTORY"
 }
 trap cleanup EXIT
 password=$(openssl rand -hex 32)
+existing_keychains=()
+while IFS= read -r entry; do
+  existing_keychains+=("$entry")
+done < <(security list-keychains -d user | sed -E 's/^[[:space:]]*"//;s/"[[:space:]]*$//')
 security create-keychain -p "$password" "$keychain"
+security list-keychains -d user -s "$keychain" "${existing_keychains[@]}"
+export OTRION_SIGNING_KEYCHAIN="$keychain"
 security unlock-keychain -p "$password" "$keychain"
 security set-keychain-settings -lut 21600 "$keychain"
 (umask 077; printf '%s' "$MACOS_CERTIFICATE_P12" | base64 -D > "$AGENT_TEMPDIRECTORY/cert.p12")
