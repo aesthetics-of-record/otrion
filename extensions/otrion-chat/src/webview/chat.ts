@@ -19,6 +19,7 @@ const send = element<HTMLButtonElement>('send');
 const stopButton = element<HTMLButtonElement>('stop');
 
 let agentName = '';
+let connectionIssue: 'setup' | 'connection' | undefined;
 const statusLabel = element('status');
 let allowed = false;
 let trusted = false;
@@ -296,15 +297,27 @@ document.addEventListener('keydown', event => {
 });
 
 function updateComposer() {
-	const agent = agentName;
 	input.contentEditable = String(loaded);
 	send.hidden = busy;
-	send.disabled = !allowed || !trusted || !input.textContent.trim() || !loaded || metadata.configuring;
+	send.disabled = connectionIssue === 'setup' || !allowed || !trusted || !input.textContent.trim() || !loaded || metadata.configuring;
 	element<HTMLButtonElement>('attach').disabled = !allowed || !trusted || busy || !loaded;
 	stopButton.hidden = !busy;
-	element('setup').hidden = !loaded || (allowed && trusted);
-	element('setup-text').textContent = trusted ? 'Enable ' + agent + ' to chat.' : 'Chat requires a trusted workspace.';
-	element('configure').textContent = trusted ? 'Agent settings' : 'Manage trust';
+	modeButton.disabled = modelButton.disabled = !allowed || !trusted || connectionIssue === 'setup';
+}
+
+function renderSetup(status: string, remote: boolean) {
+	const setup = element('setup');
+	setup.hidden = trusted && allowed && !connectionIssue;
+	statusLabel.textContent = setup.hidden ? status : '';
+	if (setup.hidden) { return; }
+	const title = !trusted ? 'Workspace trust required' : !allowed || connectionIssue === 'setup'
+		? 'Set up ' + agentName : 'Couldn’t connect to ' + agentName;
+	element('setup-title').textContent = title;
+	element('setup-text').textContent = !trusted ? 'Trust this workspace to use agent chat.' : !allowed
+		? 'Enable the agent ' + (remote ? 'on the SSH host' : 'on this computer') + ' to start chatting.' : status;
+	element('configure').textContent = trusted ? 'Open Otrion Settings' : 'Manage workspace trust';
+	element('retry-connection').hidden = !trusted || !allowed || !connectionIssue || busy || metadata.configuring;
+	setup.classList.toggle('retry-first', connectionIssue === 'connection' && trusted && allowed);
 }
 
 function saveDraft() {
@@ -557,9 +570,9 @@ window.addEventListener('message', ({ data }) => {
 			renderDraft(input, drafts[tabId] ?? '');
 		}
 		updateMetadata(data);
-		statusLabel.textContent = data.status;
+		connectionIssue = data.connectionIssue;
+		renderSetup(data.status, data.remote);
 		statusLabel.classList.toggle('working', busy);
-		element('retry-connection').hidden = !data.connectionFailed || !allowed || !trusted || data.configuring || busy;
 		updateComposer();
 		if (follow) { thread.scrollTop = thread.scrollHeight; }
 	} else if (data.type === 'metadata') {
@@ -577,7 +590,7 @@ element('retry-connection').addEventListener('click', () => post({ type: 'option
 element('configure').addEventListener('click', () => post({ type: trusted ? 'settings' : 'trust' }));
 document.querySelector('form')!.addEventListener('submit', event => {
 	event.preventDefault();
-	if (!loaded || !allowed || !trusted || busy || metadata.configuring || !input.textContent.trim()) { return; }
+	if (!loaded || send.disabled || busy || metadata.configuring || !input.textContent.trim()) { return; }
 	showPanel();
 	busy = true;
 	for (const [id, target] of insertions) { if (target.tab === tabId) { insertions.delete(id); } }

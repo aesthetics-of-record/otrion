@@ -48,6 +48,12 @@ interface Command {
 	args: string[];
 }
 
+// The SSH extension host is forked by the copy of Node shipped in the Otrion server.
+function remoteRuntimePath(): NodeJS.ProcessEnv {
+	const key = process.platform === 'win32' ? Object.keys(process.env).find(name => name.toUpperCase() === 'PATH') ?? 'Path' : 'PATH';
+	return { [key]: [path.dirname(process.execPath), process.env[key]].filter(Boolean).join(path.delimiter) };
+}
+
 async function resolveCommand(name: string, npmPackage: string, entryPoint: string): Promise<Command | undefined> {
 	const extension = path.extname(name).toLowerCase();
 	if (process.platform !== 'win32' || !extension || extension === '.exe') {
@@ -72,7 +78,7 @@ async function resolveCommand(name: string, npmPackage: string, entryPoint: stri
 	return undefined;
 }
 
-async function npmCommand(node: string): Promise<Command | undefined> {
+async function localNpmCommand(node: string): Promise<Command | undefined> {
 	if (process.platform !== 'win32') {
 		const command = await executable('npm');
 		return command ? { command, args: [] } : undefined;
@@ -134,9 +140,9 @@ export class AgentStore {
 		await this.secrets.store(this.authKey(id), JSON.stringify(auth));
 	}
 
-	async agentEnvironment(id: AgentId): Promise<NodeJS.ProcessEnv> {
+	async agentEnvironment(id: AgentId, launch: { env?: NodeJS.ProcessEnv }): Promise<NodeJS.ProcessEnv> {
 		const { mode, key } = await this.credentials(id);
-		const env = { ...process.env };
+		const env = { ...process.env, ...launch.env };
 		if (mode === 'cli') { return env; }
 		if (!key) { throw new Error('Add an API key or choose CLI account in Otrion Settings.'); }
 		if (id === 'claude') {
@@ -176,8 +182,11 @@ export class AgentStore {
 		const agent = agents[id];
 		const setting = vscode.workspace.getConfiguration('otrion.chat').get<string>(id + 'AcpPath', agent.binary);
 		if (setting === agent.binary && await this.isInstalled(id)) {
-			const node = await executable('node');
-			if (node) { return { command: node, args: [this.entry(this.directory(id), id)], source: 'Installed by Otrion' }; }
+			const remote = !!vscode.env.remoteAuthority;
+			const node = remote ? process.execPath : await executable('node');
+			if (node) {
+				return { command: node, args: [this.entry(this.directory(id), id)], source: 'Installed by Otrion', env: remote ? remoteRuntimePath() : undefined };
+			}
 		}
 		const external = await resolveCommand(setting, '@agentclientprotocol/' + agent.binary, 'dist/index.js');
 		return external ? { ...external, source: 'External installation' } : undefined;
@@ -204,7 +213,7 @@ export class AgentStore {
 			const cli = await this.authCommand(id, launch);
 			const args = [...cli.args, 'status'];
 			if (id === 'claude') { args.push('--json'); }
-			const result = await promisify(execFile)(cli.command, args, { cwd: homedir(), timeout: 5000, maxBuffer: 65536, windowsHide: true });
+			const result = await promisify(execFile)(cli.command, args, { cwd: homedir(), env: { ...process.env, ...launch.env }, timeout: 5000, maxBuffer: 65536, windowsHide: true });
 			output = id === 'claude' ? result.stdout : result.stdout + result.stderr;
 		} catch (error) {
 			if (error.code !== 1) { return 'Unknown'; }
@@ -227,7 +236,7 @@ export class AgentStore {
 		const args = [...cli.args];
 		if (id === 'claude') { args.push('login'); }
 		else if (vscode.env.remoteName) { args.push('--device-auth'); }
-		vscode.window.createTerminal({ name: agents[id].name + ' Sign In', shellPath: cli.command, shellArgs: args, cwd: vscode.Uri.file(homedir()) }).show();
+		vscode.window.createTerminal({ name: agents[id].name + ' Sign In', shellPath: cli.command, shellArgs: args, env: launch.env, cwd: vscode.Uri.file(homedir()) }).show();
 	}
 
 	async install(id: AgentId) {
@@ -236,16 +245,24 @@ export class AgentStore {
 		await mkdir(this.root, { recursive: true });
 		const staging = await mkdtemp(path.join(this.root, id + '-install-'));
 		try {
-			const args = ['install', '--prefix', staging, '--no-save', '--no-package-lock', '--no-audit', '--no-fund',
-				'@agentclientprotocol/' + agents[id].binary + '@' + agents[id].version];
-			const node = await executable('node');
-			const npm = node && await npmCommand(node);
-			if (!npm) {
-				throw new Error(vscode.env.remoteName
-					? vscode.l10n.t('Install Node.js and npm on the remote host, make them available on PATH, and reconnect.')
-					: vscode.l10n.t('Install Node.js and npm, then restart Otrion.'));
+			const remote = !!vscode.env.remoteAuthority;
+			let npm: Command | undefined;
+			if (remote) {
+				const cli = path.join(vscode.env.appRoot, 'agent-tools', 'npm', 'bin', 'npm-cli.js');
+				if (!await fileExists(cli)) {
+					throw new Error('The agent installer is missing from the Otrion server. Update Otrion and reconnect to this host.');
+				}
+				npm = { command: process.execPath, args: [cli] };
+			} else {
+				const node = await executable('node');
+				npm = node ? await localNpmCommand(node) : undefined;
+				if (!npm) { throw new Error('Install Node.js and npm, then restart Otrion.'); }
 			}
-			await promisify(execFile)(npm.command, [...npm.args, ...args], { cwd: staging, timeout: 300_000, windowsHide: true });
+			const args = [...npm.args, 'install', '--prefix', staging, '--global=false', '--no-save', '--no-package-lock', '--no-audit', '--no-fund'];
+			if (remote) { args.push('--cache', path.join(this.root, 'npm-cache')); }
+			args.push('@agentclientprotocol/' + agents[id].binary + '@' + agents[id].version);
+			await promisify(execFile)(npm.command, args, { cwd: staging, env: remote ? { ...process.env, ...remoteRuntimePath() } : process.env,
+				timeout: 300_000, windowsHide: true });
 			if (!await fileExists(this.entry(staging, id))) { throw new Error('The downloaded adapter is missing its entry point.'); }
 			try {
 				await rename(staging, target);

@@ -3,9 +3,10 @@
 import * as vscode from 'vscode';
 import { agents, AgentStore, allowed, isAgent, type AgentId } from './agents';
 
-export function registerSettings(context: vscode.ExtensionContext, store: AgentStore) {
+export function registerSettings(context: vscode.ExtensionContext, store: AgentStore, installedAgent: (id: AgentId) => void) {
 	const remote = !!vscode.env.remoteAuthority;
 	let panel: vscode.WebviewPanel | undefined;
+	let focusAgent: AgentId | undefined;
 	const installing = new Set<AgentId>();
 	const changingAuth = new Set<AgentId>();
 	const errors = new Map<AgentId, string>();
@@ -18,14 +19,14 @@ export function registerSettings(context: vscode.ExtensionContext, store: AgentS
 		const rows = await Promise.all((Object.keys(agents) as AgentId[]).map(async id => {
 			const [launch, installed] = await Promise.all([store.launch(id), store.isInstalled(id)]);
 			const setting = vscode.workspace.getConfiguration('otrion.chat').get<string>(id + 'AcpPath');
-			const missingRuntime = remote ? vscode.l10n.t('Install Node.js on the remote host and reconnect.') : 'Install Node.js and restart Otrion.';
+			const missingRuntime = 'Install Node.js and restart Otrion.';
 			const missing = setting && setting !== agents[id].binary ? 'Check otrion.chat.' + id + 'AcpPath in Editor Settings.' : installed ? missingRuntime : 'Not installed';
 			const choice = await store.authChoice(id);
 			const auth = choice.mode === 'cli' && launch && allowed(id) ? await store.authStatus(id, launch) : undefined;
 			return { id, auth, ...choice, installed, source: launch?.source, availability: launch?.source ?? missing, allowed: allowed(id), installing: installing.has(id), error: errors.get(id) };
 		}));
 		if (panel === current && sequence === revision) {
-			await current.webview.postMessage({ rows });
+			await current.webview.postMessage({ rows, remote });
 		}
 	}
 
@@ -40,7 +41,7 @@ export function registerSettings(context: vscode.ExtensionContext, store: AgentS
 				if (installing.has(id)) { return; }
 				installing.add(id);
 				void refresh();
-				try { await store.install(id); } finally { installing.delete(id); }
+				try { await store.install(id); installedAgent(id); } finally { installing.delete(id); }
 			} else if (action === 'allow' && typeof value === 'boolean') {
 				await vscode.workspace.getConfiguration('otrion.chat').update(id + 'Allowed', value, vscode.ConfigurationTarget.Global);
 			} else if (action === 'login') {
@@ -58,8 +59,14 @@ export function registerSettings(context: vscode.ExtensionContext, store: AgentS
 		if (state.focused && panel?.visible) { void refresh(); }
 	}), vscode.workspace.onDidChangeConfiguration(e => {
 		if (e.affectsConfiguration('otrion.chat')) { void refresh(); }
-	}), vscode.commands.registerCommand('otrion.settings.open', () => {
-		if (panel) { panel.reveal(); void refresh(); return; }
+	}), vscode.commands.registerCommand('otrion.settings.open', (agent?: unknown) => {
+		focusAgent = isAgent(agent) ? agent : undefined;
+		if (panel) {
+			panel.reveal();
+			if (focusAgent) { void panel.webview.postMessage({ focusAgent }); }
+			void refresh();
+			return;
+		}
 		const media = vscode.Uri.joinPath(context.extensionUri, 'media');
 		const scripts = vscode.Uri.joinPath(context.extensionUri, 'out', 'webview');
 		panel = vscode.window.createWebviewPanel('otrion.settings', 'Otrion Settings', vscode.ViewColumn.Active, {
@@ -68,8 +75,10 @@ export function registerSettings(context: vscode.ExtensionContext, store: AgentS
 		const web = panel.webview;
 		const listener = web.onDidReceiveMessage(message => {
 			if (message?.action === 'ready') {
-				void web.postMessage({ gallery: vscode.workspace.getConfiguration().get('otrion.marketplace') });
+				void web.postMessage({ focusAgent, gallery: vscode.workspace.getConfiguration().get('otrion.marketplace') });
 				void refresh();
+			} else if (message?.action === 'focusedAgent' && message.id === focusAgent) {
+				focusAgent = undefined;
 			} else if (message?.action === 'saveGallery' || message?.action === 'resetGallery') {
 				void (async () => {
 					try {
@@ -95,7 +104,7 @@ export function registerSettings(context: vscode.ExtensionContext, store: AgentS
 		panel.onDidChangeViewState(e => { if (e.webviewPanel.active) { void refresh(); } });
 		panel.onDidDispose(() => { listener.dispose(); panel = undefined; });
 		const cards = Object.entries(agents).map(([id, agent]) => `
-			<section id="${id}" aria-labelledby="${id}-name">
+			<section id="${id}" tabindex="-1" aria-labelledby="${id}-name">
 				<span class="agent-icon" aria-hidden="true"></span>
 				<div class="agent-info">
 					<h3 id="${id}-name">${agent.name}</h3><span class="auth" role="status"></span>

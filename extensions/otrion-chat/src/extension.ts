@@ -13,7 +13,6 @@ export function activate(context: vscode.ExtensionContext) {
 	const media = vscode.Uri.joinPath(context.extensionUri, 'media');
 	const scripts = vscode.Uri.joinPath(context.extensionUri, 'out', 'webview');
 	const store = new AgentStore(vscode.Uri.joinPath(context.globalStorageUri, 'agents').fsPath, context.secrets);
-	registerSettings(context, store);
 	registerThemeGuide(context);
 	const history = new SessionHistory(context, store);
 	const recent = new SessionHistory(context, store);
@@ -27,6 +26,10 @@ export function activate(context: vscode.ExtensionContext) {
 	const sideIds = () => [...tabs.keys()].filter(id => !editors.has(id));
 	const isSaved = (id: string) => !drafts.get(id)?.length && !tabs.get(id)?.busy;
 	let active = '';
+	let setupTab: string | undefined;
+	registerSettings(context, store, agent => {
+		if (setupTab && records.get(setupTab)?.agent === agent) { tabs.get(setupTab)?.retrySetup(); }
+	});
 	let view: vscode.WebviewView | undefined;
 	let header = '';
 	let pendingMenu: { menu: 'new' | 'history'; home: boolean } | undefined;
@@ -201,7 +204,10 @@ export function activate(context: vscode.ExtensionContext) {
 				case 'copyCode':
 					if (typeof message.text === 'string') { void vscode.env.clipboard.writeText(message.text); }
 					break;
-				case 'settings': void vscode.commands.executeCommand('otrion.settings.open'); break;
+				case 'settings':
+					setupTab = current;
+					void vscode.commands.executeCommand('otrion.settings.open', records.get(current)?.agent);
+					break;
 				case 'options': void tab.configure(); break;
 				case 'setOption': void tab.configure({ id: message.id, value: message.value }); break;
 				case 'findContext':
