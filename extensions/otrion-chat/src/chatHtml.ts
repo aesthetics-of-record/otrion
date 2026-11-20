@@ -19,6 +19,7 @@ export function chatHtml(web: vscode.Webview, media: vscode.Uri, scripts: vscode
 </style>
 <link rel="stylesheet" href="${resource(media, 'chat.css')}">
 </head><body>
+	<template id="copy-action"><button type="button" class="transcript-action">${icon('M10.5 3.5h7a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2h-7a2 2 0 0 1-2-2v-9a2 2 0 0 1 2-2Z M4.5 7.5v11a2 2 0 0 0 2 2h9')}${icon('m4.5 12 4.3 4.3q.7.7 1.4 0l9.3-9.3')}</button></template>
 	<div id="chat-loading" role="status"><img src="${resource(media, 'orbit.svg')}" width="32" height="32" alt=""><span>Loading chat…</span></div>
 	<main id="thread" hidden>
 		<section id="welcome" aria-label="New conversation">

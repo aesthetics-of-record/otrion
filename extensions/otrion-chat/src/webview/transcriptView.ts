@@ -2,12 +2,43 @@
 
 type TranscriptRow = import('../transcript').ChatMessage;
 declare const otrionMarkdown: {
-	render(text: string, copy: (text: string) => void, open: (href: string) => void): DocumentFragment;
+	render(text: string, copyButton: (text: string) => HTMLButtonElement, open: (href: string) => void): DocumentFragment;
 	patch(path: string, before: string, after: string): string | undefined;
 };
 
+let copyRequest = 0;
+function copyButton(label: string, getText: () => string) {
+	const template = element<HTMLTemplateElement>('copy-action');
+	const button = template.content.firstElementChild!.cloneNode(true) as HTMLButtonElement;
+	button.title = label;
+	button.setAttribute('aria-label', label);
+	button.addEventListener('click', () => {
+		const request = ++copyRequest;
+		button.dataset.copyRequest = String(request);
+		button.classList.remove('copied');
+		button.title = label;
+		post({ type: 'copyCode', text: getText(), request });
+	});
+	return button;
+}
+
+function confirmCopy(request: number) {
+	if (!Number.isSafeInteger(request)) { return; }
+	const button = document.querySelector<HTMLButtonElement>(`[data-copy-request="${request}"]`);
+	if (!button) { return; }
+	button.classList.add('copied');
+	button.title = 'Copied';
+	window.setTimeout(() => {
+		if (button.dataset.copyRequest === String(request)) {
+			button.classList.remove('copied');
+			button.title = button.getAttribute('aria-label')!;
+			delete button.dataset.copyRequest;
+		}
+	}, 1500);
+}
+
 function formatted(text: string) {
-	return otrionMarkdown.render(text, source => post({ type: 'copyCode', text: source }), href => post({ type: 'openChatLink', href }));
+	return otrionMarkdown.render(text, code => copyButton('Copy code', () => code), href => post({ type: 'openChatLink', href }));
 }
 
 // Command payloads from the Codex and Claude adapters may be shell text or an argv array.
@@ -26,13 +57,13 @@ function commandText(row: TranscriptRow): string | undefined {
 }
 
 const activityPaths: Record<string, string> = {
-	execute: 'M2.5 3.5h15v13h-15z M5.5 7l2.5 2.5L5.5 12m4.5 0h3',
+	execute: 'M4.5 3.5h11a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2h-11a2 2 0 0 1-2-2v-9a2 2 0 0 1 2-2Z M5.5 7.5l2 2-2 2 M10.5 12h3',
 	search: 'M14 8.5a5.5 5.5 0 1 1-11 0 5.5 5.5 0 0 1 11 0Zm-1.5 4 4.5 4.5',
-	read: 'M4.5 2.5h7l4 4v11h-11z M11 2.5v4.5h4.5 M7.5 10h5m-5 3h4',
-	edit: 'm3 13 10-10 4 4L7 17l-4 1z M11.5 4.5l4 4',
+	read: 'M6 2.5h4.6q.8 0 1.4.6l3.4 3.4q.6.6.6 1.4V16a1.5 1.5 0 0 1-1.5 1.5H6A1.5 1.5 0 0 1 4.5 16V4A1.5 1.5 0 0 1 6 2.5Z M11 3v3a1.5 1.5 0 0 0 1.5 1.5h3 M7.5 10.5h5m-5 3h3.5',
+	edit: 'M3.6 12.9 13 3.5a1.6 1.6 0 0 1 2.3 0l1.2 1.2a1.6 1.6 0 0 1 0 2.3l-9.4 9.4q-.3.3-.8.4l-3 .7q-.8.2-.6-.6l.6-3.2q.1-.5.3-.8Z M11.5 5l3.5 3.5',
 	plan: 'm2.5 5 1 1 2-2M8 5h9m-14.5 5 1 1 2-2M8 10h9M3 15h2m3 0h9',
 	tool: 'M11.5 3a5 5 0 0 0-6 6L2.5 12a2.5 2.5 0 0 0 3.5 3.5l4-4a5 5 0 0 0 6-6l-3 3-3-3z',
-	chevron: 'm7.5 4.5 5 5.5-5 5.5',
+	chevron: 'm7.5 4.5 4.4 4.7q.7.8 0 1.6l-4.4 4.7',
 };
 
 function activityIcon() {
@@ -188,7 +219,7 @@ function renderTranscriptRow(index: number, message: TranscriptRow) {
 			if (inputOpen && toolInput) { toolInput.open = true; }
 		}
 	} else {
-		if (previous && !previous.kind && previous.text === message.text && previous.role === message.role && !message.artifacts?.length) { return; }
+		if (previous && !previous.kind && previous.text === message.text && previous.role === message.role && !message.artifacts?.length && !previous.artifacts?.length) { return; }
 		row.className = message.role === 'You' ? 'user' : message.role === 'Connection' ? 'error' : 'assistant';
 		const body = document.createElement('div');
 		body.className = 'message-body markdown-body';
@@ -200,7 +231,14 @@ function renderTranscriptRow(index: number, message: TranscriptRow) {
 			row.replaceChildren(label, body);
 		} else {
 			body.append(formatted(message.text));
-			row.replaceChildren(body);
+			// Keep the copy button focused while the response streams.
+			const copy = row.querySelector(':scope > .transcript-action');
+			if (copy && message.text) {
+				row.firstElementChild!.replaceWith(body);
+			} else {
+				row.replaceChildren(body);
+				if (message.text) { row.append(copyButton('Copy as Markdown', () => rowModels.get(row)!.text)); }
+			}
 		}
 		appendArtifacts(body, message);
 	}

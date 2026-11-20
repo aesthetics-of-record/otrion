@@ -29,7 +29,7 @@ md.renderer.rules.image = (tokens, index) => {
 	return /^https:\/\//i.test(url) ? '<button type="button" class="markdown-image" data-src="' + md.utils.escapeHtml(url) + '">Show image · ' + label + '</button>' : label;
 };
 
-export function render(source: string, copy: (text: string) => void, open: (href: string) => void) {
+export function render(source: string, copyButton: (text: string) => HTMLButtonElement, open: (href: string) => void) {
 	const template = document.createElement('template');
 	// markdown-it escapes raw HTML; highlight.js escapes code before adding syntax spans.
 	template.innerHTML = md.render(source);
@@ -80,12 +80,7 @@ export function render(source: string, copy: (text: string) => void, open: (href
 		const bar = document.createElement('div');
 		bar.className = 'code-bar';
 		bar.append(code.className.replace(/^language-/, '') || 'Code');
-		const button = document.createElement('button');
-		button.type = 'button';
-		button.textContent = 'Copy';
-		button.setAttribute('aria-label', 'Copy code');
-		button.addEventListener('click', () => { copy(code.textContent); button.textContent = 'Copied'; });
-		bar.append(button);
+		bar.append(copyButton(code.textContent));
 		pre.replaceWith(box);
 		box.append(bar, pre);
 	}
