@@ -4,7 +4,7 @@ import { basename, isAbsolute, relative, resolve, sep } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import * as vscode from 'vscode';
 import { AcpClient, type PromptPart, type SessionUpdate } from './acp';
-import { agents, AgentStore, allowed, type AgentId } from './agents';
+import { agents, agentLocation, AgentStore, allowed, type AgentId } from './agents';
 import { readSessionOptions, type SessionOption } from './sessionOptions';
 import { applyTranscriptUpdate, type ChatMessage } from './transcript';
 
@@ -31,7 +31,7 @@ export interface SessionRecord {
 export async function workspaceDirectory(context: vscode.ExtensionContext) {
 	const folder = vscode.workspace.workspaceFolders?.[0];
 	if (folder) {
-		if (folder.uri.scheme !== 'file') { throw new Error(vscode.l10n.t('Open a folder on disk or through Remote SSH to use agent chat.')); }
+		if (folder.uri.scheme !== 'file') { throw new Error(vscode.l10n.t('Open a local, SSH, or dev container folder to use agent chat.')); }
 		return folder.uri.fsPath;
 	}
 	const dir = vscode.Uri.joinPath(context.globalStorageUri, 'empty-workspace');
@@ -94,7 +94,7 @@ export function createSession(context: vscode.ExtensionContext, store: AgentStor
 	function snapshot() {
 		clearUpdates();
 		changed();
-		void emit({ type: 'state', tabId: record.id, messages, status, connectionIssue, remote: !!vscode.env.remoteAuthority, busy: !!turn, selected,
+		void emit({ type: 'state', tabId: record.id, messages, status, connectionIssue, location: agentLocation(), busy: !!turn, selected,
 			allowed: allowed(selected), trusted: vscode.workspace.isTrusted, ...metadata() });
 	}
 
@@ -149,9 +149,7 @@ export function createSession(context: vscode.ExtensionContext, store: AgentStor
 			throw new Error('Agent session cancelled.');
 		}
 		if (!launch || !env) {
-			throw new AgentSetupError(vscode.env.remoteAuthority
-				? 'Install the adapter on the SSH host or check its configured path.'
-				: 'Install the adapter on this computer or check its configured path.');
+			throw new AgentSetupError('Install the adapter ' + agentLocation() + ' or check its configured path.');
 		}
 		// Codex may only persist a thread after its first prompt. Older local tabs have an ordinal.
 		const previousId = record.pendingFirstPrompt ? undefined : record.remoteId;

@@ -83,7 +83,7 @@
 			primary.hidden = enabled;
 			primary.dataset.action = row.source ? 'enable' : 'install';
 			primary.disabled = row.installing || (!row.source && row.installed);
-			primary.textContent = row.installing ? (data.remote ? 'Installing on SSH host…' : 'Installing…') : row.source ? 'Enable' : row.installed ? 'Unavailable' : 'Install';
+			primary.textContent = row.installing ? (data.remote ? 'Installing ' + data.location + '…' : 'Installing…') : row.source ? 'Enable' : row.installed ? 'Unavailable' : 'Install';
 			section.querySelector<HTMLElement>('.enabled')!.hidden = !enabled;
 			section.querySelector('.agent-info')!.setAttribute('title', row.availability);
 			const menu = section.querySelector<HTMLElement>('.menu')!;

@@ -1,0 +1,201 @@
+{
+	"name": "otrion-dev-containers",
+	"displayName": "Otrion Dev Containers",
+	"description": "Open a local or SSH workspace inside its development container.",
+	"publisher": "otrion",
+	"version": "0.1.0",
+	"license": "MIT",
+	"icon": "resources/icon.png",
+	"engines": {
+		"vscode": "^1.147.0"
+	},
+	"main": "./out/extension.js",
+	"extensionKind": [
+		"ui"
+	],
+	"enabledApiProposals": [
+		"resolvers",
+		"contribViewsRemote"
+	],
+	"activationEvents": [
+		"onResolveRemoteAuthority:dev-container",
+		"workspaceContains:.devcontainer/devcontainer.json",
+		"workspaceContains:.devcontainer.json"
+	],
+	"capabilities": {
+		"untrustedWorkspaces": {
+			"supported": "limited",
+			"description": "Opening or rebuilding a development container requires a trusted workspace."
+		}
+	},
+	"contributes": {
+		"views": {
+			"remote": [
+				{
+					"id": "otrion.devContainers.containers",
+					"name": "Dev Containers (Otrion)",
+					"group": "targets@2",
+					"remoteName": "dev-container"
+				}
+			]
+		},
+		"commands": [
+			{
+				"command": "otrion.devContainers.explorer.refresh",
+				"title": "Refresh Containers",
+				"icon": "$(refresh)"
+			},
+			{
+				"command": "otrion.devContainers.explorer.open",
+				"title": "Open Container",
+				"icon": "$(plug)"
+			},
+			{
+				"command": "otrion.devContainers.explorer.start",
+				"title": "Start and Open Container",
+				"icon": "$(play)"
+			},
+			{
+				"command": "otrion.devContainers.explorer.openInNewWindow",
+				"title": "Open in New Window",
+				"icon": "$(empty-window)"
+			},
+			{
+				"command": "otrion.devContainers.reopen",
+				"title": "Reopen in Container",
+				"category": "Otrion Dev Containers"
+			},
+			{
+				"command": "otrion.devContainers.rebuild",
+				"title": "Rebuild and Reopen in Container",
+				"category": "Otrion Dev Containers"
+			},
+			{
+				"command": "otrion.devContainers.returnToHost",
+				"title": "Reopen on Host",
+				"category": "Otrion Dev Containers"
+			},
+			{
+				"command": "otrion.devContainers.showLog",
+				"title": "Show Log",
+				"category": "Otrion Dev Containers"
+			},
+			{
+				"command": "otrion.devContainers.attach",
+				"title": "Attach to Running Container",
+				"category": "Otrion Dev Containers"
+			}
+		],
+		"menus": {
+			"view/title": [
+				{
+					"command": "otrion.devContainers.explorer.refresh",
+					"when": "view == otrion.devContainers.containers",
+					"group": "navigation"
+				}
+			],
+			"view/item/context": [
+				{
+					"command": "otrion.devContainers.explorer.open",
+					"when": "view == otrion.devContainers.containers && viewItem == running",
+					"group": "inline"
+				},
+				{
+					"command": "otrion.devContainers.explorer.start",
+					"when": "view == otrion.devContainers.containers && viewItem == stopped",
+					"group": "inline"
+				},
+				{
+					"command": "otrion.devContainers.explorer.open",
+					"when": "view == otrion.devContainers.containers && viewItem == running",
+					"group": "navigation@1"
+				},
+				{
+					"command": "otrion.devContainers.explorer.start",
+					"when": "view == otrion.devContainers.containers && viewItem == stopped",
+					"group": "navigation@1"
+				},
+				{
+					"command": "otrion.devContainers.explorer.openInNewWindow",
+					"when": "view == otrion.devContainers.containers && viewItem =~ /^(running|stopped|current)$/",
+					"group": "navigation@2"
+				}
+			],
+			"statusBar/remoteIndicator": [
+				{
+					"command": "otrion.devContainers.reopen",
+					"when": "workspaceFolderCount == 1 && isWorkspaceTrusted && !remoteName && !virtualWorkspace",
+					"group": "remote_30_dev-container_open@1"
+				},
+				{
+					"command": "otrion.devContainers.attach",
+					"when": "workspaceFolderCount < 2 && isWorkspaceTrusted && !remoteName && !virtualWorkspace",
+					"group": "remote_30_dev-container_open@2"
+				},
+				{
+					"command": "otrion.devContainers.reopen",
+					"when": "workspaceFolderCount == 1 && isWorkspaceTrusted && remoteName == ssh-remote",
+					"group": "remote_30_ssh-remote_container@1"
+				},
+				{
+					"command": "otrion.devContainers.attach",
+					"when": "workspaceFolderCount < 2 && isWorkspaceTrusted && remoteName == ssh-remote",
+					"group": "remote_30_ssh-remote_container@2"
+				},
+				{
+					"command": "otrion.devContainers.returnToHost",
+					"when": "remoteName == dev-container",
+					"group": "remote_30_dev-container_manage@1"
+				},
+				{
+					"command": "otrion.devContainers.rebuild",
+					"when": "remoteName == dev-container && isWorkspaceTrusted",
+					"group": "remote_30_dev-container_manage@2"
+				},
+				{
+					"command": "otrion.devContainers.showLog",
+					"when": "remoteName == dev-container",
+					"group": "remote_30_dev-container_manage@3"
+				}
+			],
+			"commandPalette": [
+				{ "command": "otrion.devContainers.explorer.refresh", "when": "false" },
+				{ "command": "otrion.devContainers.explorer.open", "when": "false" },
+				{ "command": "otrion.devContainers.explorer.start", "when": "false" },
+				{ "command": "otrion.devContainers.explorer.openInNewWindow", "when": "false" },
+				{
+					"command": "otrion.devContainers.reopen",
+					"when": "workspaceFolderCount == 1 && isWorkspaceTrusted && (!remoteName || remoteName == ssh-remote)"
+				},
+				{
+					"command": "otrion.devContainers.rebuild",
+					"when": "remoteName == dev-container && isWorkspaceTrusted"
+				},
+				{
+					"command": "otrion.devContainers.returnToHost",
+					"when": "remoteName == dev-container"
+				},
+				{
+					"command": "otrion.devContainers.showLog",
+					"when": "true"
+				},
+				{
+					"command": "otrion.devContainers.attach",
+					"when": "workspaceFolderCount < 2 && isWorkspaceTrusted && (!remoteName || remoteName == ssh-remote)"
+				}
+			]
+		},
+		"resourceLabelFormatters": [
+			{
+				"scheme": "vscode-remote",
+				"authority": "dev-container+*",
+				"formatting": {
+					"label": "${path}",
+					"separator": "/",
+					"tildify": true,
+					"workspaceSuffix": "Dev Container"
+				}
+			}
+		]
+	}
+}

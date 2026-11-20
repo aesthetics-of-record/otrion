@@ -49,6 +49,7 @@ export const workspaceMembers = [
 	'extensions/microsoft-authentication',
 	'extensions/notebook-renderers',
 	'extensions/npm',
+	'extensions/otrion-dev-containers',
 	'extensions/otrion-remote-ssh',
 	'extensions/php-language-features',
 	'extensions/references-view',

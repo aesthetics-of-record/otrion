@@ -22,8 +22,18 @@ verify_product() {
 }
 
 pnpm exec tsc -p extensions/otrion-chat
+pnpm exec tsc -p extensions/otrion-dev-containers
+pnpm exec tsc -p extensions/otrion-remote-ssh
+node --test extensions/otrion-dev-containers/test/host.test.cjs
 pnpm run gulp "vscode-$platform-$arch-min"
 app="../VSCode-$platform-$arch"
+resources="$app/resources/app"
+if [[ "$platform" == darwin ]]; then
+  resources="$app/Otrion.app/Contents/Resources/app"
+fi
+test -f "$resources/extensions/otrion-dev-containers/dist/extension.js"
+test -f "$resources/extensions/otrion-dev-containers/resources/start-server.sh"
+node "$resources/node_modules.asar.unpacked/@devcontainers/cli/devcontainer.js" --version
 case "$platform" in
   darwin)
     verify_product "$app/Otrion.app/Contents/Resources/app/product.json"
@@ -54,5 +64,6 @@ else
   runtime="../$server/node"
 fi
 test "$("$runtime" -p 'process.platform + "-" + process.arch')" = "$platform-$arch"
+"$runtime" "../$server/node_modules/@devcontainers/cli/devcontainer.js" --version
 OTRION_CHAT_TEST_EXTENSION="../$server/extensions/otrion-chat" "$runtime" --test extensions/otrion-chat/test/remoteChat.test.cjs
 tar -czf "$out/otrion-reh-$platform-$arch.tar.gz" -C .. "$server"
