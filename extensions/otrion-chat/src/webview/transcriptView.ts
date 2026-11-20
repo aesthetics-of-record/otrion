@@ -99,6 +99,15 @@ function outputBlock(parent: HTMLElement, label: string, text: string) {
 }
 
 function appendArtifacts(body: HTMLElement, row: TranscriptRow) {
+	const images = (row.artifacts ?? []).flatMap(artifact => artifact.image ? [{ label: artifact.label, image: artifact.image }] : []);
+	if (images.length) {
+		const strip = document.createElement('div');
+		strip.className = 'image-strip';
+		strip.setAttribute('role', 'group');
+		strip.setAttribute('aria-label', 'Message images');
+		strip.append(...images.map((_, index) => imageThumbnail(images, index)));
+		body.prepend(strip);
+	}
 	for (const artifact of row.artifacts ?? []) {
 		if (artifact.before !== undefined && artifact.after !== undefined) {
 			const patch = otrionMarkdown.patch(artifact.label, artifact.before, artifact.after);
@@ -117,12 +126,7 @@ function appendArtifacts(body: HTMLElement, row: TranscriptRow) {
 				pre.append(span);
 			}
 			body.append(label, pre);
-		} else if (artifact.image) {
-			const img = document.createElement('img');
-			img.src = artifact.image;
-			img.alt = artifact.label;
-			body.append(img);
-		} else if (artifact.text && !(artifact.label === 'Terminal' && row.terminal !== undefined)) {
+		} else if (!artifact.image && artifact.text && !(artifact.label === 'Terminal' && row.terminal !== undefined)) {
 			outputBlock(body, artifact.label, artifact.text);
 		}
 	}

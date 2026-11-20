@@ -215,6 +215,11 @@ export function activate(context: vscode.ExtensionContext) {
 			}
 			if (!tab) { return; }
 			switch (message?.type) {
+				case 'previewImages':
+					void vscode.commands.executeCommand('workbench.action.chat.openImageInCarousel', {
+						attachments: message.images, startIndex: message.startIndex
+					}).then(undefined, () => vscode.window.showErrorMessage(vscode.l10n.t('Could not open the image preview.')));
+					break;
 				case 'fileIcon':
 					if (typeof message.uri === 'string' && message.uri.startsWith('file:') && Number.isSafeInteger(message.request)) {
 						void vscode.commands.executeCommand<string>('_otrion.chat.fileIcon', vscode.Uri.parse(message.uri), message.folder === true).then(
