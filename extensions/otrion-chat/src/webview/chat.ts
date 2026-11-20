@@ -305,10 +305,16 @@ function updateComposer() {
 	modeButton.disabled = modelButton.disabled = !allowed || !trusted || connectionIssue === 'setup';
 }
 
-function renderSetup(status: string, location: string) {
+function renderStatus(status: string, activity?: string) {
+	const text = activity ?? status;
+	if (statusLabel.textContent !== text) { statusLabel.textContent = text; }
+	statusLabel.classList.toggle('working', !!activity);
+}
+
+function renderSetup(status: string, location: string, activity?: string) {
 	const setup = element('setup');
 	setup.hidden = trusted && allowed && !connectionIssue;
-	statusLabel.textContent = setup.hidden ? status : '';
+	renderStatus(setup.hidden ? status : '', setup.hidden ? activity : undefined);
 	if (setup.hidden) { return; }
 	const title = !trusted ? 'Workspace trust required' : !allowed || connectionIssue === 'setup'
 		? 'Set up ' + agentName : 'Couldn’t connect to ' + agentName;
@@ -490,7 +496,9 @@ window.addEventListener('message', ({ data }) => {
 		element('chat-loading').hidden = true;
 		thread.hidden = false;
 	}
-	if (data.type === 'refreshIcons') {
+	if (data.type === 'copied') {
+		confirmCopy(data.request);
+	} else if (data.type === 'refreshIcons') {
 		input.querySelectorAll<HTMLElement>('.resource-chip').forEach(requestChipIcon);
 	} else if (data.type === 'fileIcon' && Number.isSafeInteger(data.request)) {
 		const img = input.querySelector<HTMLImageElement>(`[data-icon-request="${data.request}"] > img`);
@@ -559,6 +567,8 @@ window.addEventListener('message', ({ data }) => {
 		showPanel();
 		tabId = '';
 		loaded = false;
+		busy = false;
+		renderStatus('');
 		messages.replaceChildren();
 		document.querySelector('footer')!.hidden = true;
 		welcome.hidden = false;
@@ -597,8 +607,7 @@ window.addEventListener('message', ({ data }) => {
 		}
 		updateMetadata(data);
 		connectionIssue = data.connectionIssue;
-		renderSetup(data.status, data.location);
-		statusLabel.classList.toggle('working', busy);
+		renderSetup(data.status, data.location, data.activity);
 		updateComposer();
 		if (follow) { thread.scrollTop = thread.scrollHeight; }
 	} else if (data.type === 'metadata') {
@@ -607,7 +616,7 @@ window.addEventListener('message', ({ data }) => {
 	} else if (data.type === 'transcript' && tabId === data.tabId) {
 		const follow = nearEnd();
 		for (const { index, message } of data.rows) { renderTranscriptRow(index, message); }
-		statusLabel.textContent = data.status;
+		if (element('setup').hidden) { renderStatus(data.status, data.activity); }
 		if (follow) { thread.scrollTop = thread.scrollHeight; }
 	}
 });
@@ -619,6 +628,7 @@ document.querySelector('form')!.addEventListener('submit', event => {
 	if (!loaded || send.disabled || busy || metadata.configuring || !input.textContent.trim()) { return; }
 	showPanel();
 	busy = true;
+	renderStatus('', 'Working');
 	for (const [id, target] of insertions) { if (target.tab === tabId) { insertions.delete(id); } }
 	post({ type: 'send', parts: readDraft(input) });
 	input.replaceChildren();

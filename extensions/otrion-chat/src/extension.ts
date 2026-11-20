@@ -238,7 +238,12 @@ export function activate(context: vscode.ExtensionContext) {
 					if (typeof message.path === 'string') { void tab.openLink(message.path, true, message.line); }
 					break;
 				case 'copyCode':
-					if (typeof message.text === 'string') { void vscode.env.clipboard.writeText(message.text); }
+					if (typeof message.text === 'string') {
+						void vscode.env.clipboard.writeText(message.text).then(
+							() => webview.postMessage({ type: 'copied', request: message.request }),
+							() => vscode.window.showErrorMessage(vscode.l10n.t('Could not copy to the clipboard.'))
+						);
+					}
 					break;
 				case 'options': void tab.configure(); break;
 				case 'setOption': void tab.configure({ id: message.id, value: message.value }); break;

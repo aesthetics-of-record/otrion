@@ -11,10 +11,28 @@ import { applyTranscriptUpdate, type ChatMessage } from './transcript';
 class AgentSetupError extends Error {}
 
 interface Turn {
+	activity: string;
 	cancelled: boolean;
 	prompting: boolean;
 	start: number;
 	timer?: NodeJS.Timeout;
+}
+
+const toolActivity: Record<string, string> = {
+	read: 'Reading files', search: 'Searching', edit: 'Editing files', execute: 'Running a command',
+};
+
+function activityForRow(row: ChatMessage) {
+	switch (row.kind) {
+		case 'thought': return 'Thinking';
+		case 'plan': return 'Planning';
+		case 'tool':
+			return row.status === 'pending' || row.status === 'in_progress'
+				? toolActivity[row.toolKind ?? ''] ?? 'Using a tool' : 'Working';
+		case 'compaction': return row.status === 'in_progress' ? 'Compacting context' : 'Working';
+		case 'notice': return undefined;
+		default: return 'Responding';
+	}
 }
 
 export interface SessionRecord {
@@ -87,14 +105,14 @@ export function createSession(context: vscode.ExtensionContext, store: AgentStor
 		flushTimer ??= setTimeout(() => {
 			const rows = [...dirtyRows].map(index => ({ index, message: messages[index] }));
 			clearUpdates();
-			emit({ type: 'transcript', tabId: record.id, rows, status });
+			emit({ type: 'transcript', tabId: record.id, rows, status, activity: turn?.activity });
 		}, 40);
 	}
 
 	function snapshot() {
 		clearUpdates();
 		changed();
-		void emit({ type: 'state', tabId: record.id, messages, status, connectionIssue, location: agentLocation(), busy: !!turn, selected,
+		void emit({ type: 'state', tabId: record.id, messages, status, connectionIssue, location: agentLocation(), busy: !!turn, activity: turn?.activity, selected,
 			allowed: allowed(selected), trusted: vscode.workspace.isTrusted, ...metadata() });
 	}
 
@@ -128,8 +146,8 @@ export function createSession(context: vscode.ExtensionContext, store: AgentStor
 			const index = applyTranscriptUpdate(messages, name, update);
 			if (index !== undefined) {
 				const row = messages[index];
-				if (turn?.prompting && !turn.cancelled) {
-					status = '';
+				if (turn?.prompting && !turn.cancelled && index >= turn.start) {
+					turn.activity = activityForRow(row) ?? turn.activity;
 				}
 				publishRow(index);
 				if (!turn && (update._meta?.terminal_exit || update.status || row.kind === 'notice')) { changed(); }
@@ -290,13 +308,12 @@ export function createSession(context: vscode.ExtensionContext, store: AgentStor
 		const text = parts.map(part => part.type === 'text' ? part.text : '@' + part.name).join('');
 		if (!text.trim()) { snapshot(); return; }
 		const id = selected;
-		const name = agents[id].name;
-		const active: Turn = { cancelled: false, prompting: false, start: messages.length };
+		const active: Turn = { activity: client && !client.closed ? 'Working' : 'Connecting', cancelled: false, prompting: false, start: messages.length };
 		turn = active;
 		connectionIssue = undefined;
 		const pendingMessage = { role: 'You', text };
 		messages.push(pendingMessage);
-		status = client ? 'Waiting for ' + name + '…' : 'Connecting to ' + name + '…';
+		status = '';
 		snapshot();
 		try {
 			const session = await connect(id, pendingMessage);
@@ -304,7 +321,7 @@ export function createSession(context: vscode.ExtensionContext, store: AgentStor
 			record.pendingFirstPrompt = false;
 			active.start = messages.length;
 			active.prompting = true;
-			status = 'Waiting for ' + name + '…';
+			active.activity = 'Working';
 			snapshot();
 			void rememberOptions();
 			const result = await session.prompt(parts);
@@ -342,7 +359,7 @@ export function createSession(context: vscode.ExtensionContext, store: AgentStor
 			return;
 		}
 		turn.cancelled = true;
-		status = 'Stopping…';
+		turn.activity = 'Stopping';
 		snapshot();
 		if (turn.prompting) {
 			client?.cancel();
