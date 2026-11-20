@@ -25,9 +25,9 @@ On the first desktop launch, Otrion starts in Otrion Dark and opens a theme guid
 
 ## Release packages
 
-To ship merged changes from `main`, follow the [release guide](release.md).
+Update the version in a PR and merge to `main` to start the automatic release. [Release guide](release.md)
 
-Run `bash scripts/otrion/package-release.sh` after installing dependencies on the target OS and CPU. The script writes native packages to `dist/v0.1.0/`. Windows produces a per-user installer, macOS a ZIP with an ad hoc signed application, and Linux a tar archive. Every target also produces a Remote SSH server archive named `otrion-reh-<os>-<arch>.tar.gz`. The release workflow builds `win32`, `darwin`, and `linux` packages for both `x64` and `arm64`. Download its artifacts and extract the outer Actions ZIP before attaching the twelve files to the `v0.1.0` GitHub release. Use the exact build commit as the tag target. The release version is tracked separately from the VS Code extension API version.
+For a local build, run `bash scripts/otrion/package-release.sh` after installing dependencies on the target OS and CPU. The script writes packages under `dist/v<version>/`. Each target produces a desktop package and a Remote SSH server archive named `otrion-reh-<os>-<arch>.tar.gz`. The release version is tracked separately from the VS Code extension API version.
 
 ## Remote SSH
 
@@ -44,7 +44,7 @@ pnpm run gulp vscode-reh-linux-x64-min
 tar -czf otrion-reh-linux-x64.tar.gz -C .. vscode-reh-linux-x64
 ```
 
-Attach the archive to an Otrion GitHub release tagged `v0.1.0` alongside the desktop downloads. Keep the top-level directory in the archive because the installer strips it when extracting. For private builds, set `remote.SSH.serverDownloadUrlTemplate` in User Settings to your own artifact endpoint. The remote installation uses `~/.otrion-server`. Open Remote - SSH keeps its default strict commit validation.
+The release workflow attaches these archives to the matching GitHub Release. Keep the top-level directory in manually built archives because the installer strips it when extracting. For private builds, set `remote.SSH.serverDownloadUrlTemplate` in User Settings to your own artifact endpoint. The remote installation uses `~/.otrion-server`. Open Remote - SSH keeps its default strict commit validation.
 
 ## Set up Codex and Claude Code
 

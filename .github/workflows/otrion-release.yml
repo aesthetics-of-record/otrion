@@ -1,19 +1,44 @@
 name: Otrion release packages
 on:
   workflow_dispatch:
+    inputs:
+      publish:
+        description: Publish the version in product.json (main only)
+        type: boolean
+        default: false
   push:
-    branches: [feat/release-0.1.0]
+    branches: [main]
+    paths: [product.json]
     tags: ['v[0-9]*']
 
 concurrency:
-  group: otrion-packages-${{ github.ref }}
-  cancel-in-progress: true
+  group: otrion-packages-${{ github.ref }}-${{ github.sha }}-${{ github.event_name }}-${{ inputs.publish }}
 
 permissions:
   contents: read
 
 jobs:
+  prepare:
+    runs-on: ubuntu-24.04
+    outputs:
+      build: ${{ steps.release.outputs.build }}
+      publish: ${{ steps.release.outputs.publish }}
+      tag: ${{ steps.release.outputs.tag }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Select the release
+        id: release
+        env:
+          BEFORE: ${{ github.event.before }}
+          PUBLISH_REQUESTED: ${{ inputs.publish }}
+        run: bash scripts/otrion/select-release.sh
+
   package:
+    needs: prepare
+    if: needs.prepare.outputs.build == 'true'
     strategy:
       fail-fast: false
       matrix:
@@ -25,6 +50,8 @@ jobs:
       GOMEMLIMIT: 2GiB
     steps:
       - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
       - uses: actions/setup-node@v4
         with:
           node-version-file: .nvmrc
@@ -73,3 +100,26 @@ jobs:
           path: dist/v*/*
           if-no-files-found: error
           compression-level: 0
+
+  publish:
+    needs: [prepare, package]
+    if: needs.prepare.outputs.publish == 'true'
+    runs-on: ubuntu-24.04
+    concurrency:
+      group: otrion-publish-${{ needs.prepare.outputs.tag }}
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: Otrion-*
+          path: release-assets
+          merge-multiple: true
+      - name: Tag and publish the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ needs.prepare.outputs.tag }}
+        run: bash scripts/otrion/publish-release.sh release-assets

@@ -8,6 +8,8 @@ export async function getServerConfig(): Promise<IServerConfig> {
 
     const customServerBinaryName = vscode.workspace.getConfiguration('remote.SSH').get<string>('serverBinaryName', '');
     const serverValidation = vscode.workspace.getConfiguration('remote.SSH').get<ServerValidation>('serverValidation', 'strict');
+    const downloadUrl = productJson.serverDownloadUrlTemplate as string | undefined;
+    const otrionVersion = productJson.otrionVersion as string | undefined;
 
     return {
         version: vscode.version.replace('-insider',''),
@@ -16,7 +18,7 @@ export async function getServerConfig(): Promise<IServerConfig> {
         release: productJson.release as string || '',
         serverApplicationName: customServerBinaryName || productJson.serverApplicationName as string,
         serverDataFolderName: productJson.serverDataFolderName as string,
-        serverDownloadUrlTemplate: productJson.serverDownloadUrlTemplate as string,
+        serverDownloadUrlTemplate: otrionVersion ? downloadUrl?.replaceAll('${otrionVersion}', otrionVersion) : downloadUrl,
         serverValidation,
     };
 }
