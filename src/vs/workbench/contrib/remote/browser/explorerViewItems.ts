@@ -19,6 +19,7 @@ import { Disposable, DisposableMap } from '../../../../base/common/lifecycle.js'
 
 interface IRemoteSelectItem extends ISelectOptionItem {
 	authority: string[];
+	order: number;
 	virtualWorkspace?: string;
 	dispose(): void;
 }
@@ -69,6 +70,9 @@ export class SwitchRemoteViewItem extends Disposable {
 					: (this.storageService.get(REMOTE_EXPLORER_TYPE_KEY, StorageScope.WORKSPACE)?.split(',') ?? this.storageService.get(REMOTE_EXPLORER_TYPE_KEY, StorageScope.PROFILE)?.split(',')));
 			if (explorerType !== undefined) {
 				authority = this.getAuthorityForExplorerType(explorerType);
+			} else {
+				// Apply the first target group's filter even in a workspace with no saved selection.
+				authority = [...this.completedRemotes.values()].sort((a, b) => a.order - b.order)[0].authority;
 			}
 			if (authority) {
 				this.select(authority);
@@ -134,7 +138,8 @@ export class SwitchRemoteViewItem extends Disposable {
 						thisCapture.select(authority);
 					}
 				});
-				this.completedRemotes.set(authority[0], { text: text.value, authority, virtualWorkspace: view.virtualWorkspace, dispose: () => action.dispose() });
+				const order = Number(view.group.split('@')[1]) || 0;
+				this.completedRemotes.set(authority[0], { text: text.value, authority, order, virtualWorkspace: view.virtualWorkspace, dispose: () => action.dispose() });
 			}
 		}
 		if (this.completedRemotes.size > startingCount) {

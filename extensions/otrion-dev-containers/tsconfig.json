@@ -1,0 +1,5 @@
+{
+	"extends": "../tsconfig.base.json",
+	"compilerOptions": { "rootDir": "./src", "outDir": "./out", "types": ["node"] },
+	"include": ["src/**/*.ts", "../../src/vscode-dts/vscode.d.ts", "../../src/vscode-dts/vscode.proposed.resolvers.d.ts"]
+}

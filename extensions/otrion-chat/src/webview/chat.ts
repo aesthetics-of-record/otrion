@@ -305,7 +305,7 @@ function updateComposer() {
 	modeButton.disabled = modelButton.disabled = !allowed || !trusted || connectionIssue === 'setup';
 }
 
-function renderSetup(status: string, remote: boolean) {
+function renderSetup(status: string, location: string) {
 	const setup = element('setup');
 	setup.hidden = trusted && allowed && !connectionIssue;
 	statusLabel.textContent = setup.hidden ? status : '';
@@ -314,7 +314,7 @@ function renderSetup(status: string, remote: boolean) {
 		? 'Set up ' + agentName : 'Couldn’t connect to ' + agentName;
 	element('setup-title').textContent = title;
 	element('setup-text').textContent = !trusted ? 'Trust this workspace to use agent chat.' : !allowed
-		? 'Enable the agent ' + (remote ? 'on the SSH host' : 'on this computer') + ' to start chatting.' : status;
+		? 'Enable the agent ' + location + ' to start chatting.' : status;
 	element('configure').textContent = trusted ? 'Open Otrion Settings' : 'Manage workspace trust';
 	element('retry-connection').hidden = !trusted || !allowed || !connectionIssue || busy || metadata.configuring;
 	setup.classList.toggle('retry-first', connectionIssue === 'connection' && trusted && allowed);
@@ -575,7 +575,7 @@ window.addEventListener('message', ({ data }) => {
 		}
 		updateMetadata(data);
 		connectionIssue = data.connectionIssue;
-		renderSetup(data.status, data.remote);
+		renderSetup(data.status, data.location);
 		statusLabel.classList.toggle('working', busy);
 		updateComposer();
 		if (follow) { thread.scrollTop = thread.scrollHeight; }

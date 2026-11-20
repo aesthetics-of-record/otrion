@@ -9,6 +9,11 @@ import { createRequire } from 'node:module';
 import { promisify } from 'node:util';
 import * as vscode from 'vscode';
 
+export function agentLocation() {
+	if (vscode.env.remoteName === 'dev-container') { return 'in this container'; }
+	return vscode.env.remoteAuthority ? 'on the SSH host' : 'on this computer';
+}
+
 export const agents = {
 	codex: { name: 'Codex', binary: 'codex-acp', version: '2.7.0' },
 	claude: { name: 'Claude Code', binary: 'claude-agent-acp', version: '0.108.0' },

@@ -1832,6 +1832,8 @@ importers:
         specifier: ^12.0.1
         version: 12.0.1
 
+  extensions/otrion-dev-containers: {}
+
   extensions/otrion-remote-ssh:
     dependencies:
       '@zokugun/is-it-type':

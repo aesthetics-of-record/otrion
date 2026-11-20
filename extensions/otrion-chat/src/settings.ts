@@ -3,7 +3,7 @@
 import { randomBytes } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import * as vscode from 'vscode';
-import { agents, AgentStore, allowed, isAgent, type AgentId } from './agents';
+import { agents, agentLocation, AgentStore, allowed, isAgent, type AgentId } from './agents';
 
 export function registerSettings(context: vscode.ExtensionContext, store: AgentStore, installedAgent: (id: AgentId) => void) {
 	const remote = !!vscode.env.remoteAuthority;
@@ -28,7 +28,7 @@ export function registerSettings(context: vscode.ExtensionContext, store: AgentS
 			return { id, auth, ...choice, installed, source: launch?.source, availability: launch?.source ?? missing, allowed: allowed(id), installing: installing.has(id), error: errors.get(id) };
 		}));
 		if (panel === current && sequence === revision) {
-			await current.webview.postMessage({ rows, remote });
+			await current.webview.postMessage({ rows, remote, location: agentLocation() });
 		}
 	}
 
@@ -148,7 +148,7 @@ ${iconStyles}</style>
 			<div class="gallery-actions"><button class="primary" type="submit">Save</button><button type="button" id="reset">Restore Open VSX defaults</button>
 			<button type="button" id="reload" hidden>Reload Window</button></div><p id="gallery-status" role="status"></p></form>
 			<h2>Agents</h2>
-			${remote ? `<p class="agent-host">${vscode.l10n.t('Agents run on the connected host. Install, enable, and sign in for this host.')}</p>` : ''}
+			${remote ? `<p class="agent-host">${vscode.l10n.t('Agents run {0}. Install, enable, and sign in here.', agentLocation())}</p>` : ''}
 			<div class="catalog"><input id="search" type="search" placeholder="Search agents…" aria-label="Search agents">
 			<div class="agents">${cards}</div><p id="empty" hidden>No matching agents.</p></div></main><script nonce="${nonce}">${script}</script></body></html>`;
 	}), { dispose: () => panel?.dispose() });

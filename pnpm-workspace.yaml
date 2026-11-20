@@ -33,6 +33,7 @@ packages:
   - extensions/microsoft-authentication
   - extensions/notebook-renderers
   - extensions/npm
+  - extensions/otrion-dev-containers
   - extensions/otrion-remote-ssh
   - extensions/otrion-chat
   - extensions/php-language-features
