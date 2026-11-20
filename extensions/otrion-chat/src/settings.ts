@@ -1,5 +1,7 @@
 /* Copyright (c) Otrion contributors. Licensed under the MIT License. */
 
+import { randomBytes } from 'node:crypto';
+import { readFileSync } from 'node:fs';
 import * as vscode from 'vscode';
 import { agents, AgentStore, allowed, isAgent, type AgentId } from './agents';
 
@@ -67,10 +69,17 @@ export function registerSettings(context: vscode.ExtensionContext, store: AgentS
 			void refresh();
 			return;
 		}
-		const media = vscode.Uri.joinPath(context.extensionUri, 'media');
-		const scripts = vscode.Uri.joinPath(context.extensionUri, 'out', 'webview');
+		// Read from the extension host's own installation so first paint needs no SSH resource requests.
+		const asset = (file: string) => readFileSync(context.asAbsolutePath(file), 'utf8');
+		const css = asset('media/settings.css');
+		const script = asset('out/webview/settings.js');
+		const nonce = randomBytes(16).toString('base64');
+		const iconStyles = Object.keys(agents).map(id => {
+			const svg = Buffer.from(asset('media/' + id + '.svg')).toString('base64');
+			return '#' + id + ' .agent-icon { mask-image: url("data:image/svg+xml;base64,' + svg + '"); }';
+		}).join('\n');
 		panel = vscode.window.createWebviewPanel('otrion.settings', 'Otrion Settings', vscode.ViewColumn.Active, {
-			enableScripts: true, localResourceRoots: [media, scripts],
+			enableScripts: true, localResourceRoots: [],
 		});
 		const web = panel.webview;
 		const listener = web.onDidReceiveMessage(message => {
@@ -129,10 +138,11 @@ export function registerSettings(context: vscode.ExtensionContext, store: AgentS
 				<p class="error" role="alert"></p>
 			</section>`).join('');
 		web.html = `<!doctype html><html lang="en"><head><meta charset="utf-8">
-			<meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src ${web.cspSource}; style-src ${web.cspSource}; script-src ${web.cspSource};">
-			<link rel="stylesheet" href="${web.asWebviewUri(vscode.Uri.joinPath(media, 'settings.css'))}">
+			<meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src data:; style-src 'nonce-${nonce}'; script-src 'nonce-${nonce}';">
+			<style nonce="${nonce}">${css}
+${iconStyles}</style>
 			</head><body><main><h1>Otrion Settings</h1><h2>Extensions</h2>
-			<form id="gallery" class="catalog"><label>Marketplace service URL<input type="url" id="serviceUrl" required></label>
+			<form id="gallery" class="catalog" inert aria-busy="true"><label>Marketplace service URL<input type="url" id="serviceUrl" required></label>
 			<p>Used to search for and install extensions.</p>
 			<label>Marketplace item URL<input type="url" id="itemUrl" required></label><p>Used to open extension pages.</p>
 			<div class="gallery-actions"><button class="primary" type="submit">Save</button><button type="button" id="reset">Restore Open VSX defaults</button>
@@ -140,6 +150,6 @@ export function registerSettings(context: vscode.ExtensionContext, store: AgentS
 			<h2>Agents</h2>
 			${remote ? `<p class="agent-host">${vscode.l10n.t('Agents run on the connected host. Install, enable, and sign in for this host.')}</p>` : ''}
 			<div class="catalog"><input id="search" type="search" placeholder="Search agents…" aria-label="Search agents">
-			<div class="agents">${cards}</div><p id="empty" hidden>No matching agents.</p></div></main><script src="${web.asWebviewUri(vscode.Uri.joinPath(scripts, 'settings.js'))}"></script></body></html>`;
+			<div class="agents">${cards}</div><p id="empty" hidden>No matching agents.</p></div></main><script nonce="${nonce}">${script}</script></body></html>`;
 	}), { dispose: () => panel?.dispose() });
 }

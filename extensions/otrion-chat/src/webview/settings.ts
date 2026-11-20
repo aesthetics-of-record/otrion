@@ -49,6 +49,8 @@
 		if (data.gallery) {
 			service.value = data.gallery.serviceUrl;
 			item.value = data.gallery.itemUrl;
+			gallery.inert = false;
+			gallery.removeAttribute('aria-busy');
 		}
 		if (data.notice) {
 			document.getElementById('gallery-status')!.textContent = data.notice;

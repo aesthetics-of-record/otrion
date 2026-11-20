@@ -475,6 +475,10 @@ function renderRecent(items: SessionChoice[], status: string) {
 
 const nearEnd = () => thread.scrollHeight - thread.clientHeight - thread.scrollTop < 48;
 window.addEventListener('message', ({ data }) => {
+	if (data.type === 'empty' || data.type === 'state') {
+		element('chat-loading').hidden = true;
+		thread.hidden = false;
+	}
 	if (data.type === 'refreshIcons') {
 		input.querySelectorAll<HTMLElement>('.resource-chip').forEach(requestChipIcon);
 	} else if (data.type === 'fileIcon' && Number.isSafeInteger(data.request)) {

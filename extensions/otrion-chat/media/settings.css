@@ -43,8 +43,6 @@ button:disabled { opacity: .55; cursor: default; }
 .auth { margin-inline-start: 8px; white-space: nowrap; }
 .auth.signed-in { color: var(--vscode-testing-iconPassed); }
 .agent-icon { width: 100%; max-width: 32px; min-width: 23px; height: 30px; background: currentColor; mask: center / contain no-repeat; }
-#claude .agent-icon { mask-image: url(claude.svg); }
-#codex .agent-icon { mask-image: url(codex.svg); }
 
 .auth-options { grid-column: 2 / -1; display: flex; flex-wrap: wrap; gap: 5px; align-items: center; margin-top: 8px; }
 .auth-method { display: inline-flex; padding: 2px; border-radius: 6px; background: var(--vscode-input-background); border: 1px solid var(--line); }
