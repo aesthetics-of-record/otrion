@@ -27,7 +27,7 @@ function getEntitlementsForFile(filePath: string): string {
 }
 
 function getKeychainPath(tempDir: string): string {
-	return path.join(tempDir, 'buildagent.keychain');
+	return process.env['OTRION_SIGNING_KEYCHAIN'] ?? path.join(tempDir, 'buildagent.keychain');
 }
 
 /**
