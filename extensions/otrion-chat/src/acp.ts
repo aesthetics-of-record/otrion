@@ -47,6 +47,8 @@ export interface AgentSessionInfo {
 }
 
 interface AcpResult {
+	_meta?: { steering?: { supported?: boolean } };
+	outcome?: string;
 	sessions?: AgentSessionInfo[];
 	nextCursor?: string | null;
 	configOptions?: unknown;
@@ -94,6 +96,7 @@ export class AcpClient {
 	}
 
 	supportsImages = false;
+	supportsSteering = false;
 
 	async #initialize(version: string) {
 		const result = await this.#request('initialize', {
@@ -107,6 +110,7 @@ export class AcpClient {
 		if (result?.protocolVersion !== 1) {
 			throw new Error('ACP agent did not negotiate protocol version 1.');
 		}
+		this.supportsSteering = result._meta?.steering?.supported === true;
 		this.supportsImages = result.agentCapabilities?.promptCapabilities?.image === true;
 		return result.agentCapabilities;
 	}
@@ -169,6 +173,16 @@ export class AcpClient {
 			sessionId: this.#sessionId,
 			prompt,
 		});
+	}
+
+	async steer(prompt: PromptPart[]) {
+		const result = await this.#request('_session/steering', {
+			sessionId: this.#sessionId, prompt, _meta: { steering: { idleBehavior: 'promptRequired' } }
+		}, 30_000);
+		if (result.outcome !== 'injected' && result.outcome !== 'promptRequired') {
+			throw new Error('The agent did not confirm delivery.');
+		}
+		return result.outcome;
 	}
 
 	cancel() {

@@ -57,7 +57,12 @@ export function chatHtml(web: vscode.Webview, media: vscode.Uri, scripts: vscode
 			<summary>Session model changed</summary>
 			<div id="resume-warning-detail"></div>
 		</details>
-		<div id="status" role="status"></div>
+		<div id="status" role="status" hidden><span></span></div>
+		<section id="follow-ups" aria-label="Queued messages" hidden>
+			<div id="queue-count"></div>
+			<div id="queue-list"></div>
+			<div id="queue-error" role="status"></div>
+		</section>
 		<section id="setup" aria-labelledby="setup-title" hidden>
 			<div role="status"><strong id="setup-title"></strong><p id="setup-text"></p></div>
 			<div class="setup-actions"><button id="configure" type="button"></button><button type="button" id="retry-connection" hidden>Retry connection</button></div>

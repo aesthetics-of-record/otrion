@@ -48,7 +48,21 @@ footer { position: relative; flex: none; padding: 0 10px 9px; }
 #resume-warning { margin: 0 3px 7px; color: var(--vscode-editorWarning-foreground, var(--muted)); font-size: 12px; overflow-wrap: anywhere; }
 #resume-warning summary { cursor: pointer; }
 #resume-warning-detail { margin: 4px 0 0 14px; color: var(--muted); }
-#status:empty { display: none; }
+footer:has(#status.working) { padding-top: 14px; }
+@media (prefers-reduced-motion: no-preference) and (forced-colors: none) {
+	body:not(.vscode-reduce-motion) #status.working span {
+		background: linear-gradient(100deg, var(--muted) 34%, var(--vscode-foreground) 50%, var(--muted) 66%) 100% 50% / 280% 100%;
+		background-clip: text; color: transparent; animation: working-text 2.6s ease-in-out infinite;
+	}
+}
+@keyframes working-text { 0%, 12% { background-position-x: 100%; } 82%, 100% { background-position-x: 0%; } }
+#follow-ups { margin: 0 2px 7px; padding: 4px 8px; border-inline-start: 2px solid var(--line); color: var(--muted); font-size: 12px; }
+#queue-count { font-size: 11px; }
+#queue-list { max-height: 15vh; overflow: auto; scrollbar-width: thin; }
+.queued-message { display: flex; align-items: center; gap: 6px; }
+.queued-message span { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.queued-message button { padding: 3px 5px; font-size: 11px; }
+#queue-error { color: var(--vscode-editorWarning-foreground); }
 #status.working { display: flex; align-items: center; gap: 7px; min-height: 22px; padding-inline: 3px; }
 #status.working::before {
 	content: ''; flex: 0 0 18px; height: 18px;

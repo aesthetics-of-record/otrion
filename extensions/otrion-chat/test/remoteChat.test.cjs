@@ -71,6 +71,11 @@ test('Remote SSH agents use the host runtime, credentials and file paths', async
 			const assert = require('node:assert/strict');
 			const fs = require('node:fs');
 			const { fileURLToPath } = require('node:url');
+			let held;
+			const finishHeld = reason => {
+				console.log(JSON.stringify({ jsonrpc: '2.0', id: held, result: { stopReason: reason } }));
+				held = undefined;
+			};
 			const values = { model: 'sol', effort: 'medium', fast: false, mode: 'read-only' };
 			const choices = { model: ['sol', 'astra'], effort: ['medium', 'high'], mode: ['read-only', 'plan'] };
 			const configOptions = () => Object.entries(values).map(([id, currentValue]) => ({
@@ -81,7 +86,7 @@ test('Remote SSH agents use the host runtime, credentials and file paths', async
 			require('node:readline').createInterface({ input: process.stdin }).on('line', line => {
 				const { id, method, params } = JSON.parse(line);
 				let result = { stopReason: 'end_turn' };
-				if (method === 'initialize') result = { protocolVersion: 1, agentCapabilities: { loadSession: true, promptCapabilities: { image: true } } };
+				if (method === 'initialize') result = { protocolVersion: 1, _meta: { steering: { supported: true } }, agentCapabilities: { loadSession: true, promptCapabilities: { image: true } } };
 				if (method === 'session/new') {
 					assert.equal(fs.realpathSync(params.cwd), fs.realpathSync(process.cwd()));
 					result = { sessionId: 'fixture' };
@@ -101,7 +106,18 @@ test('Remote SSH agents use the host runtime, credentials and file paths', async
 					if (params.configId === 'model') { values.effort = 'medium'; values.fast = false; }
 					result = { configOptions: configOptions() };
 				}
-				if (method === 'session/prompt') {
+				if (method === 'session/prompt' && params.prompt[0]?.text === 'hold') {
+					held = id;
+					return;
+				}
+				if (method === 'session/cancel') { finishHeld('cancelled'); return; }
+				if (method === '_session/steering') {
+					assert.equal(params._meta.steering.idleBehavior, 'promptRequired');
+					assert.equal(params.prompt[0].text, 'inject');
+					result = { outcome: 'injected' };
+					finishHeld('end_turn');
+				}
+				if (method === 'session/prompt' && params.prompt[0]?.type === 'resource_link') {
 					assert.deepEqual(params.prompt[1], { type: 'image', mimeType: 'image/png', data: 'aW1n' });
 					assert.equal(fs.realpathSync(fileURLToPath(params.prompt[0].uri)), fs.realpathSync('notes #1.md'));
 					assert.equal(params.prompt[0].name, 'notes #1.md');
@@ -149,6 +165,25 @@ test('Remote SSH agents use the host runtime, credentials and file paths', async
 				await session.send([{ type: 'resource_link', uri: resource }, { type: 'image', mimeType: 'image/png', data: 'aW1n' }]);
 				assert.deepEqual(record.messages, [{ role: 'You', text: '@notes #1.md', artifacts: [{ label: 'Image', image: 'data:image/png;base64,aW1n' }] }]);
 				assert.equal(record.remoteId, 'fixture');
+				const text = value => [{ type: 'text', text: value }];
+				const live = session.send(text('hold'));
+				await new Promise(resolve => setImmediate(resolve));
+				for (const value of ['first', 'remove', 'inject', 'last']) { await session.send(text(value)); }
+				assert.deepEqual(record.queue.map(item => item.label), ['first', 'remove', 'inject', 'last']);
+				session.discardQueued(record.queue[1].id);
+				await session.sendQueued(record.queue[1].id);
+				await live;
+				assert.deepEqual(record.messages.slice(1).map(row => row.text), ['hold', 'inject', 'first', 'last']);
+				assert.deepEqual(record.queue, []);
+
+				const stopped = session.send(text('hold'));
+				await new Promise(resolve => setImmediate(resolve));
+				await session.send(text('keep'));
+				session.stop();
+				await stopped;
+				assert.equal(record.queue[0].label, 'keep');
+				await session.sendQueued(record.queue[0].id);
+				assert.equal(record.messages.at(-1).text, 'keep');
 			} finally {
 				session.dispose();
 			}

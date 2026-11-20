@@ -1,5 +1,6 @@
 /* Copyright (c) Otrion contributors. Licensed under the MIT License. */
 
+import { randomUUID } from 'node:crypto';
 import { basename, isAbsolute, relative, resolve, sep } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import * as vscode from 'vscode';
@@ -41,7 +42,15 @@ function recordedModelFromNotice(title?: string, description?: string) {
 	return pattern.exec(title ?? '')?.[1] ?? pattern.exec(description ?? '')?.[1];
 }
 
+interface QueuedMessage {
+	uncertain?: boolean;
+	id: string;
+	input: unknown[];
+	label: string;
+}
+
 export interface SessionRecord {
+	queue?: QueuedMessage[];
 	options?: Record<string, string | boolean>;
 	pendingModel?: string;
 	recordedModel?: string;
@@ -75,6 +84,8 @@ export function createSession(context: vscode.ExtensionContext, store: AgentStor
 	let connectedRevision = -1;
 	let turn: Turn | undefined;
 	const messages = record.messages;
+	const queue = record.queue ??= [];
+	let steering: Promise<void> | undefined;
 	// Older Otrion versions persisted these transient notices as transcript rows.
 	for (let index = messages.length - 1; index >= 0; index--) {
 		const row = messages[index];
@@ -134,7 +145,10 @@ export function createSession(context: vscode.ExtensionContext, store: AgentStor
 	function snapshot() {
 		clearUpdates();
 		changed();
-		void emit({ type: 'state', tabId: record.id, messages, status, connectionIssue, location: agentLocation(), busy: !!turn, activity: turn?.activity, selected,
+		void emit({ type: 'state', tabId: record.id, messages, queue: queue.map(({ id, label }) => ({ id, label })),
+			deliveryError: queue.some(item => item.uncertain) ? 'Delivery was not confirmed. Check the conversation before sending again.' : undefined,
+			canSteer: !!(turn?.prompting && !turn.cancelled && client?.supportsSteering && !steering), steering: !!steering,
+			status, connectionIssue, location: agentLocation(), busy: !!turn, activity: turn?.activity, selected,
 			allowed: allowed(selected), trusted: vscode.workspace.isTrusted, ...metadata() });
 	}
 
@@ -272,14 +286,14 @@ export function createSession(context: vscode.ExtensionContext, store: AgentStor
 	}
 
 	async function attach(folder = false) {
-		if (!allowed(selected) || !vscode.workspace.isTrusted || disposed || turn) { return; }
+		if (!allowed(selected) || !vscode.workspace.isTrusted || disposed) { return; }
 		const files = await vscode.window.showOpenDialog({ canSelectFiles: !folder, canSelectFolders: folder, canSelectMany: true,
 			openLabel: 'Attach', defaultUri: record.cwd ? vscode.Uri.file(record.cwd) : vscode.workspace.workspaceFolders?.[0]?.uri });
 		return describeResources(files ?? []);
 	}
 
 	async function describeResources(files: readonly vscode.Uri[]) {
-		if (disposed || turn || !allowed(selected) || !vscode.workspace.isTrusted) { return []; }
+		if (disposed || !allowed(selected) || !vscode.workspace.isTrusted) { return []; }
 		return Promise.all(files.filter(uri => uri.scheme === 'file').map(async uri => {
 			const stat = await vscode.workspace.fs.stat(uri).then(result => result.type, () => 0);
 			return { type: 'resource_link', uri: uri.toString(), name: basename(uri.fsPath) || uri.fsPath, folder: !!(stat & vscode.FileType.Directory) };
@@ -324,11 +338,8 @@ export function createSession(context: vscode.ExtensionContext, store: AgentStor
 		}
 	}
 
-	async function send(input: unknown) {
-		if (!allowed(selected) || !vscode.workspace.isTrusted || turn || configuring || !Array.isArray(input)) {
-			snapshot();
-			return;
-		}
+	function preparePrompt(input: unknown) {
+		if (!Array.isArray(input)) { return; }
 		const parts: PromptPart[] = [];
 		const images: NonNullable<ChatMessage['artifacts']> = [];
 		for (const part of input) {
@@ -343,13 +354,42 @@ export function createSession(context: vscode.ExtensionContext, store: AgentStor
 			}
 		}
 		const text = parts.map(part => part.type === 'text' ? part.text : part.type === 'image' ? '' : '@' + part.name).join('');
-		if (!text.trim() && !images.length) { snapshot(); return; }
+		if (!text.trim() && !images.length) { return; }
+		const pendingMessage: ChatMessage = { role: 'You', text };
+		if (images.length) { pendingMessage.artifacts = images; }
+		return { parts, pendingMessage };
+	}
+
+	function removeQueued(id: string) {
+		const index = queue.findIndex(item => item.id === id);
+		if (index >= 0) { queue.splice(index, 1); }
+	}
+
+	function discardQueued(id: string) {
+		if (!steering) { removeQueued(id); snapshot(); }
+	}
+
+	async function send(input: unknown, queuedId?: string) {
+		if (disposed || !allowed(selected) || !vscode.workspace.isTrusted || configuring || !Array.isArray(input)) {
+			snapshot();
+			return;
+		}
+		const prompt = preparePrompt(input);
+		if (!prompt) { snapshot(); return; }
+		const { parts, pendingMessage } = prompt;
+		if (turn) {
+			if (!queuedId) {
+				const label = pendingMessage.text.trim() || pendingMessage.artifacts?.map(image => image.label).join(', ') || 'Attachment';
+				queue.push({ id: randomUUID(), input, label: label.slice(0, 250) });
+				snapshot();
+			}
+			return;
+		}
 		const id = selected;
+		let advance = false;
 		const active: Turn = { activity: client && !client.closed ? 'Working' : 'Connecting', cancelled: false, prompting: false, start: messages.length };
 		turn = active;
 		connectionIssue = undefined;
-		const pendingMessage: ChatMessage = { role: 'You', text };
-		if (images.length) { pendingMessage.artifacts = images; }
 		messages.push(pendingMessage);
 		status = '';
 		snapshot();
@@ -360,16 +400,18 @@ export function createSession(context: vscode.ExtensionContext, store: AgentStor
 			if (!session.supportsImages && parts.some(part => part.type === 'image')) {
 				if (messages.at(-1) === pendingMessage) { messages.pop(); }
 				status = 'This agent does not accept images. Remove the image or use an image-capable agent.';
-				emit({ type: 'restoreDraft', tabId: record.id, parts: input });
+				if (!queuedId) { emit({ type: 'restoreDraft', tabId: record.id, parts: input }); }
 				return;
 			}
 			record.pendingFirstPrompt = false;
+			if (queuedId) { removeQueued(queuedId); }
 			active.prompting = true;
 			active.activity = 'Working';
 			void rememberOptions();
 			snapshot();
 			const result = await session.prompt(parts);
 			if (result?.stopReason === 'end_turn') {
+				advance = true;
 				delete record.recordedModel;
 				delete record.pendingModel;
 				saveSessionOptions();
@@ -377,7 +419,7 @@ export function createSession(context: vscode.ExtensionContext, store: AgentStor
 			status = result?.stopReason === 'end_turn' ? '' : 'Turn ended (' + (result?.stopReason ?? 'unknown reason') + ').';
 		} catch (error) {
 			disconnect();
-			emit({ type: 'restoreDraft', tabId: record.id, parts: input });
+			if (!queuedId) { emit({ type: 'restoreDraft', tabId: record.id, parts: input }); }
 			if (!active.prompting && messages.at(-1) === pendingMessage) { messages.pop(); }
 			if (!active.cancelled && !active.prompting) {
 				connectionIssue = error instanceof AgentSetupError ? 'setup' : 'connection';
@@ -398,9 +440,35 @@ export function createSession(context: vscode.ExtensionContext, store: AgentStor
 			if (active.cancelled) {
 				status = 'Stopped.';
 			}
+			active.prompting = false;
+			await steering;
 			turn = undefined;
 			snapshot();
+			if (advance && !active.cancelled && queue.length && !queue[0].uncertain) {
+				await send(queue[0].input, queue[0].id);
+			}
 		}
+	}
+
+	async function sendQueued(id: string) {
+		const item = queue.find(entry => entry.id === id);
+		if (!item || disposed || steering || configuring || !allowed(selected) || !vscode.workspace.isTrusted) { return; }
+		if (!turn) { await send(item.input, id); return; }
+		const session = client;
+		if (!turn.prompting || turn.cancelled || !session?.supportsSteering) { return; }
+		const prompt = preparePrompt(item.input);
+		if (!prompt) { return; }
+		steering = session.steer(prompt.parts).then(outcome => {
+			if (outcome === 'injected') {
+				removeQueued(id);
+				messages.push(prompt.pendingMessage);
+			}
+		}, () => { item.uncertain = true; }).finally(() => {
+			steering = undefined;
+			snapshot();
+		});
+		snapshot();
+		await steering;
 	}
 
 	function stop() {
@@ -477,5 +545,5 @@ export function createSession(context: vscode.ExtensionContext, store: AgentStor
 		if (connectionIssue === 'setup') { await configure(); }
 	}
 
-	return { retrySetup, invalidateAuth() { authRevision++; }, get busy() { return !!turn; }, select, snapshot, send, openLink, stop, configure, attach, describeResources, findContext, suspend, dispose() { disposed = true; search?.cancel(); suspend(); } };
+	return { retrySetup, invalidateAuth() { authRevision++; }, get busy() { return !!turn; }, select, snapshot, send, sendQueued, discardQueued, openLink, stop, configure, attach, describeResources, findContext, suspend, dispose() { disposed = true; search?.cancel(); suspend(); } };
 }

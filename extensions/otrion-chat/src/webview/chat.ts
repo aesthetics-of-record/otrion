@@ -304,19 +304,26 @@ document.addEventListener('keydown', event => {
 	}
 });
 
+const defaultPlaceholder = input.getAttribute('aria-placeholder')!;
 function updateComposer() {
 	input.contentEditable = loaded ? 'plaintext-only' : 'false';
-	send.hidden = busy;
+	const hasDraft = !!(attachedImages.length || input.textContent.trim());
+	send.hidden = busy && !hasDraft;
+	send.title = busy ? 'Queue message (Enter)' : 'Send message (Enter)';
+	send.setAttribute('aria-label', busy ? 'Queue message' : 'Send message');
+	input.setAttribute('aria-placeholder', busy ? 'Queue a follow-up…' : defaultPlaceholder);
+	input.nextElementSibling!.textContent = busy ? 'Queue a follow-up…' : defaultPlaceholder;
 	send.disabled = readingImages || connectionIssue === 'setup' || !allowed || !trusted || (!attachedImages.length && !input.textContent.trim()) || !loaded || metadata.configuring;
-	element<HTMLButtonElement>('attach-image').disabled = readingImages || !allowed || !trusted || busy || !loaded;
-	element<HTMLButtonElement>('attach').disabled = !allowed || !trusted || busy || !loaded;
+	element<HTMLButtonElement>('attach-image').disabled = readingImages || !allowed || !trusted || !loaded;
+	element<HTMLButtonElement>('attach').disabled = !allowed || !trusted || !loaded;
 	stopButton.hidden = !busy;
 	modeButton.disabled = modelButton.disabled = !allowed || !trusted || connectionIssue === 'setup';
 }
 
 function renderStatus(status: string, activity?: string) {
 	const text = activity ?? status;
-	if (statusLabel.textContent !== text) { statusLabel.textContent = text; }
+	statusLabel.hidden = !text;
+	if (statusLabel.firstElementChild!.textContent !== text) { statusLabel.firstElementChild!.textContent = text; }
 	statusLabel.classList.toggle('working', !!activity);
 }
 
@@ -488,7 +495,7 @@ function commandChoices(query: string) {
 function suggest() {
 	hideSuggestions();
 	const caret = currentRange(input);
-	if (!tabId || !allowed || !trusted || busy || !caret?.collapsed || caret.startContainer.nodeType !== Node.TEXT_NODE) { return; }
+	if (!tabId || !allowed || !trusted || !caret?.collapsed || caret.startContainer.nodeType !== Node.TEXT_NODE) { return; }
 	const node = caret.startContainer;
 	const value = node.textContent ?? '';
 	const before = value.slice(0, caret.startOffset);
@@ -543,6 +550,36 @@ function renderRecent(items: SessionChoice[], status: string, settingsTarget?: s
 	element('recent-status').textContent = status || (items.length ? '' : 'No recent conversations.');
 }
 
+function renderQueue(items: { id: string; label: string }[], canSteer: boolean, delivering: boolean, error: string) {
+	const panel = element('follow-ups');
+	panel.hidden = !items.length;
+	element('queue-count').textContent = items.length + ' queued';
+	element('queue-error').textContent = error;
+	const list = element('queue-list');
+	list.replaceChildren(...items.map(item => {
+		const row = document.createElement('div');
+		row.className = 'queued-message';
+		const label = document.createElement('span');
+		label.textContent = label.title = item.label;
+		const deliver = document.createElement('button');
+		deliver.type = 'button';
+		deliver.textContent = busy ? 'Steer now' : 'Send now';
+		deliver.title = busy ? 'Add to the current turn' : 'Send this message';
+		deliver.disabled = delivering || !trusted || !allowed || metadata.configuring || (busy && !canSteer);
+		if (busy && !canSteer) { deliver.title = 'Waiting for the next turn'; }
+		deliver.onclick = () => post({ type: 'sendQueued', id: item.id });
+		const remove = document.createElement('button');
+		remove.type = 'button';
+		remove.textContent = '×';
+		remove.title = 'Remove queued message';
+		remove.setAttribute('aria-label', remove.title);
+		remove.disabled = delivering;
+		remove.onclick = () => post({ type: 'discardQueued', id: item.id });
+		row.append(label, deliver, remove);
+		return row;
+	}));
+}
+
 const nearEnd = () => thread.scrollHeight - thread.clientHeight - thread.scrollTop < 48;
 window.addEventListener('message', ({ data }) => {
 	if (data.type === 'empty' || data.type === 'state') {
@@ -560,10 +597,10 @@ window.addEventListener('message', ({ data }) => {
 			if (data.src) { img.src = data.src; }
 		}
 	} else if (data.type === 'resourceDrag') {
-		element('agent-drop').hidden = !(data.over && tabId && trusted && allowed && !busy);
+		element('agent-drop').hidden = !(data.over && tabId && trusted && allowed);
 	} else if (data.type === 'droppedResources') {
 		element('agent-drop').hidden = true;
-		if (tabId && trusted && allowed && !busy) { requestResources({ type: 'addResources', uris: data.uris }); }
+		if (tabId && trusted && allowed) { requestResources({ type: 'addResources', uris: data.uris }); }
 	} else if (data.type === 'insertResources') {
 		const target = insertions.get(data.request);
 		insertions.delete(data.request);
@@ -661,6 +698,7 @@ window.addEventListener('message', ({ data }) => {
 			renderDraft(drafts[tabId] ?? '');
 		}
 		updateMetadata(data);
+		renderQueue(data.queue ?? [], data.canSteer, data.steering, data.deliveryError ?? '');
 		connectionIssue = data.connectionIssue;
 		renderSetup(data.status, data.location, data.activity);
 		updateComposer();
@@ -680,10 +718,9 @@ element('retry-connection').addEventListener('click', () => post({ type: 'option
 element('configure').addEventListener('click', () => post({ type: trusted ? 'settings' : 'trust' }));
 document.querySelector('form')!.addEventListener('submit', event => {
 	event.preventDefault();
-	if (send.disabled || busy) { return; }
+	if (send.disabled) { return; }
 	showPanel();
-	busy = true;
-	renderStatus('', 'Working');
+	if (!busy) { busy = true; renderStatus('', 'Working'); }
 	for (const [id, target] of insertions) { if (target.tab === tabId) { insertions.delete(id); } }
 	post({ type: 'send', parts: composerDraft() });
 	renderDraft('');
