@@ -4,6 +4,7 @@
  *--------------------------------------------------------------------------------------------*/
 
 import * as electron from 'electron';
+import { localize } from '../../../nls.js';
 import { CancellationToken } from '../../../base/common/cancellation.js';
 import { memoize } from '../../../base/common/decorators.js';
 import { Event } from '../../../base/common/event.js';
@@ -88,7 +89,10 @@ export class DarwinUpdateService extends AbstractUpdateService implements IRelau
 			return;
 		}
 
-		const message = this.state.explicit ? err : undefined;
+		const detail = /read-only volume/i.test(err)
+			? localize('updateReadOnlyVolume', "Quit {0}, move {0}.app to Applications using Finder, then reopen it and check for updates. macOS cannot replace the app in its current location.", this.productService.nameShort)
+			: err;
+		const message = this.state.explicit ? detail : undefined;
 		this.setState(State.Idle(UpdateType.Archive, message));
 	}
 
@@ -125,41 +129,38 @@ export class DarwinUpdateService extends AbstractUpdateService implements IRelau
 			return;
 		}
 
-		// When connection is metered and this is not an explicit check, avoid electron call as to not to trigger auto-download.
-		if (!explicit && this.meteredConnectionService.isConnectionMetered) {
-			this.logService.info('update#doCheckForUpdates - checking for update without auto-download because connection is metered');
-			this.checkForUpdateNoDownload(url);
+		const autoDownload = explicit || !this.meteredConnectionService.isConnectionMetered;
+		if (this.githubReleaseUrl || !autoDownload) {
+			void this.checkUpdateFeed(this.githubReleaseUrl ?? url, autoDownload, pendingCommit);
 			return;
 		}
 
-		this.logService.trace('update#doCheckForUpdates - using Electron autoUpdater', { url, explicit, background });
 		electron.autoUpdater.checkForUpdates();
 	}
 
-	/**
-	 * Manually check the update feed URL without triggering Electron's auto-download.
-	 * Used when connection is metered or in the embedded app.
-	 * @param canInstall When false, signals that the update cannot be installed from this app.
-	 */
-	private async checkForUpdateNoDownload(url: string, canInstall?: boolean): Promise<void> {
+	private async checkUpdateFeed(url: string, autoDownload: boolean, pendingVersion?: string): Promise<void> {
 		const checking = this.state;
 		try {
-			const update = await this.fetchUpdate(this.githubReleaseUrl ?? url, 'updateService.darwin.checkForUpdates', CancellationToken.None);
+			const update = await this.fetchUpdate(url, 'updateService.darwin.checkForUpdates', CancellationToken.None, pendingVersion);
 			if (this.state !== checking) {
 				return;
 			}
 			if (!update || !update.url || !update.version || !update.productVersion) {
-				this.logService.trace('update#checkForUpdateNoDownload - no update available');
+				this.logService.trace('update#checkUpdateFeed - no update available');
 				const notAvailable = this.state.type === StateType.CheckingForUpdates && this.state.explicit;
 				this.setState(State.Idle(UpdateType.Archive, undefined, notAvailable || undefined));
 			} else {
-				this.logService.trace('update#checkForUpdateNoDownload - update available', { version: update.version, productVersion: update.productVersion });
-				this.setState(State.AvailableForDownload(update, canInstall));
+				this.logService.trace('update#checkUpdateFeed - update available', { version: update.version, productVersion: update.productVersion });
+				if (autoDownload) {
+					electron.autoUpdater.checkForUpdates();
+				} else {
+					this.setState(State.AvailableForDownload(update));
+				}
 			}
 		} catch (err) {
-			this.logService.error('update#checkForUpdateNoDownload - failed to check for update', err);
+			this.logService.error('update#checkUpdateFeed - failed to check for update', err);
 			if (this.state === checking) {
-				this.setState(State.Idle(UpdateType.Archive));
+				this.onError(String(err));
 			}
 		}
 	}

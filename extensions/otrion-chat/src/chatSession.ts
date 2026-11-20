@@ -360,21 +360,38 @@ export function createSession(context: vscode.ExtensionContext, store: AgentStor
 			}
 			if (!vscode.workspace.isTrusted) { return; }
 			let file = href;
+			let column = 1;
 			if (!fileOnly) {
-				const match = /^(.*?)(?:#L(\d+)(?:-L?\d+)?)?$/.exec(href);
-				if (!match?.[1]) { return; }
-				file = match[1];
-				line = match[2] ? Number(match[2]) : undefined;
-				if (file.startsWith('file://')) { file = vscode.Uri.parse(file).fsPath; }
-				else {
-					if ((!isAbsolute(file) && /^[a-z][a-z0-9+.-]*:/i.test(file)) || file.startsWith('//')) { return; }
+				const fragment = /#L(\d+)(?:C(\d+)|-L?\d+)?$/i.exec(file);
+				if (fragment) {
+					file = file.slice(0, fragment.index);
+					line = Number(fragment[1]);
+					column = Number(fragment[2] ?? 1);
+				}
+				if (/^(?:file|vscode-remote):\/\//i.test(file)) {
+					const uri = vscode.Uri.parse(file);
+					if (uri.scheme === 'vscode-remote') {
+						if (!vscode.env.remoteAuthority || uri.authority !== vscode.env.remoteAuthority) { return; }
+						file = uri.with({ scheme: 'file', authority: '' }).fsPath;
+					} else {
+						file = uri.fsPath;
+					}
+				} else {
 					file = decodeURIComponent(file);
 				}
 			}
+			const suffix = /:(\d+)(?::(\d+))?$/.exec(file);
+			if (suffix && line === undefined) {
+				file = file.slice(0, suffix.index);
+				line = Number(suffix[1]);
+				column = Number(suffix[2] ?? 1);
+			}
+			if (!file || (!fileOnly && ((!isAbsolute(file) && /^[a-z][a-z0-9+.-]*:/i.test(file)) || file.startsWith('//')))) { return; }
 			const cwd = record.cwd ?? await workspaceDirectory(context);
 			const uri = vscode.Uri.file(resolve(cwd, file));
 			const doc = await vscode.workspace.openTextDocument(uri);
-			const position = new vscode.Position(Math.min(doc.lineCount, Math.max(1, Number.isSafeInteger(line) ? line! : 1)) - 1, 0);
+			const row = Math.min(doc.lineCount, Math.max(1, Number.isSafeInteger(line) ? line! : 1)) - 1;
+			const position = doc.validatePosition(new vscode.Position(row, Math.max(0, Number.isSafeInteger(column) ? column - 1 : 0)));
 			await vscode.window.showTextDocument(doc, { preview: true, selection: new vscode.Range(position, position) });
 		} catch (error) {
 			void vscode.window.showWarningMessage('Could not open link: ' + error.message);

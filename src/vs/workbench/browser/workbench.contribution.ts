@@ -651,7 +651,7 @@ const registry = Registry.as<IConfigurationRegistry>(ConfigurationExtensions.Con
 			},
 			'workbench.secondarySideBar.showLabels': {
 				'type': 'boolean',
-				'default': true,
+				'default': false,
 				'markdownDescription': localize('secondarySideBarShowLabels', "Controls whether activity items in the secondary side bar title are shown as label or icon. This setting only has an effect when {0} is not set to {1}.", '`#workbench.activityBar.location#`', '`top`'),
 				agentsWindow: { default: true, readOnly: true },
 			},

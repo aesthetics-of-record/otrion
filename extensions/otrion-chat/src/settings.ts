@@ -8,7 +8,8 @@ import { agents, agentLocation, AgentStore, allowed, isAgent, type AgentId } fro
 export function registerSettings(context: vscode.ExtensionContext, store: AgentStore, installedAgent: (id: AgentId) => void) {
 	const remote = !!vscode.env.remoteAuthority;
 	let panel: vscode.WebviewPanel | undefined;
-	let focusAgent: AgentId | undefined;
+	let currentPage: 'general' | 'agents' = 'general';
+	let focusAgent: AgentId | 'agents' | undefined;
 	const installing = new Set<AgentId>();
 	const changingAuth = new Set<AgentId>();
 	const errors = new Map<AgentId, string>();
@@ -16,7 +17,7 @@ export function registerSettings(context: vscode.ExtensionContext, store: AgentS
 
 	async function refresh() {
 		const current = panel;
-		if (!current) { return; }
+		if (!current || currentPage !== 'agents') { return; }
 		const sequence = ++revision;
 		const rows = await Promise.all((Object.keys(agents) as AgentId[]).map(async id => {
 			const [launch, installed] = await Promise.all([store.launch(id), store.isInstalled(id)]);
@@ -62,7 +63,9 @@ export function registerSettings(context: vscode.ExtensionContext, store: AgentS
 	}), vscode.workspace.onDidChangeConfiguration(e => {
 		if (e.affectsConfiguration('otrion.chat')) { void refresh(); }
 	}), vscode.commands.registerCommand('otrion.settings.open', (agent?: unknown) => {
-		focusAgent = isAgent(agent) ? agent : undefined;
+		focusAgent = isAgent(agent) || agent === 'agents' ? agent : undefined;
+		if (focusAgent) { currentPage = 'agents'; }
+		else if (!panel) { currentPage = 'general'; }
 		if (panel) {
 			panel.reveal();
 			if (focusAgent) { void panel.webview.postMessage({ focusAgent }); }
@@ -74,18 +77,19 @@ export function registerSettings(context: vscode.ExtensionContext, store: AgentS
 		const css = asset('media/settings.css');
 		const script = asset('out/webview/settings.js');
 		const nonce = randomBytes(16).toString('base64');
-		const iconStyles = Object.keys(agents).map(id => {
-			const svg = Buffer.from(asset('media/' + id + '.svg')).toString('base64');
-			return '#' + id + ' .agent-icon { mask-image: url("data:image/svg+xml;base64,' + svg + '"); }';
-		}).join('\n');
+		const iconUrl = (file: string) => 'url("data:image/svg+xml;base64,' + Buffer.from(asset('media/' + file + '.svg')).toString('base64') + '")';
+		const iconStyles = Object.keys(agents).map(id => '#' + id + ' .agent-icon { mask-image: ' + iconUrl(id) + '; }').join('\n');
 		panel = vscode.window.createWebviewPanel('otrion.settings', 'Otrion Settings', vscode.ViewColumn.Active, {
-			enableScripts: true, localResourceRoots: [],
+			enableScripts: true, localResourceRoots: [], retainContextWhenHidden: true,
 		});
 		const web = panel.webview;
 		const listener = web.onDidReceiveMessage(message => {
 			if (message?.action === 'ready') {
 				void web.postMessage({ focusAgent, gallery: vscode.workspace.getConfiguration().get('otrion.marketplace') });
 				void refresh();
+			} else if (message?.action === 'navigate' && (message.page === 'general' || message.page === 'agents')) {
+				currentPage = message.page;
+				if (currentPage === 'agents') { void refresh(); }
 			} else if (message?.action === 'focusedAgent' && message.id === focusAgent) {
 				focusAgent = undefined;
 			} else if (message?.action === 'saveGallery' || message?.action === 'resetGallery') {
@@ -113,43 +117,53 @@ export function registerSettings(context: vscode.ExtensionContext, store: AgentS
 		panel.onDidChangeViewState(e => { if (e.webviewPanel.active) { void refresh(); } });
 		panel.onDidDispose(() => { listener.dispose(); panel = undefined; });
 		const cards = Object.entries(agents).map(([id, agent]) => `
-			<section id="${id}" tabindex="-1" aria-labelledby="${id}-name">
+			<section id="${id}" data-provider="${id === 'codex' ? 'OpenAI' : 'Anthropic'}" tabindex="-1" aria-labelledby="${id}-name">
 				<span class="agent-icon" aria-hidden="true"></span>
 				<div class="agent-info">
 					<h3 id="${id}-name">${agent.name}</h3><span class="auth" role="status"></span>
-					<p>${id === 'codex' ? 'OpenAI coding agent' : 'Anthropic coding agent'}</p>
 				</div>
 				<button class="primary" disabled>Checking…</button>
 				<span class="enabled" hidden>Enabled</span>
-				<button class="more" popovertarget="${id}-menu" aria-label="More actions for ${agent.name}" title="More actions" disabled>···</button>
+				<button class="more" popovertarget="${id}-menu" aria-label="More actions for ${agent.name}" title="More actions" disabled>•••</button>
 				<div class="menu" id="${id}-menu" popover>
 					<button data-action="install">Install Otrion-managed adapter</button>
 					<button data-action="disable">Disable</button>
 				</div>
 				<div class="auth-options">
 					<div class="auth-method" role="group" aria-label="Authentication for ${agent.name}">
-						<button data-action="cli" disabled>CLI account</button><button data-action="key" disabled>API key</button>
+						<button data-action="cli" title="Use the CLI account ${agentLocation()}" disabled>CLI account</button><button data-action="key" disabled>API key</button>
 					</div>
 					<button class="auth-action" data-action="login" hidden>Sign in</button>
 					<button class="auth-action" data-action="replaceKey" hidden>Replace key</button>
 					<button class="auth-action" data-action="removeKey" hidden>Remove key</button>
-					<p class="auth-note"></p>
+					<p class="auth-note" hidden>Provider API billing applies.</p>
 				</div>
 				<p class="error" role="alert"></p>
 			</section>`).join('');
+		const icon = (path: string) => `<svg aria-hidden="true" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="${path}"/></svg>`;
+		const navigation = [
+			{ page: 'general', label: 'General', symbol: 'M2 5h7m3 0h2M2 11h2m3 0h7M9 3.5h3v3H9zM4 9.5h3v3H4z' },
+			{ page: 'agents', label: 'Agents', symbol: 'M3 2.5h10a1 1 0 0 1 1 1v9a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1v-9a1 1 0 0 1 1-1ZM4.5 6l2 2-2 2m4.5 0h2.5' }
+		].map(({ page, label, symbol }) =>
+			`<button type="button" aria-label="${label}" title="${label}" aria-controls="page-${page}" aria-current="${currentPage === page ? 'page' : 'false'}">${icon(symbol)}<span>${label}</span></button>`
+		).join('');
 		web.html = `<!doctype html><html lang="en"><head><meta charset="utf-8">
 			<meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src data:; style-src 'nonce-${nonce}'; script-src 'nonce-${nonce}';">
 			<style nonce="${nonce}">${css}
+.brand-mark { mask-image: ${iconUrl('orbit')}; }
 ${iconStyles}</style>
-			</head><body><main><h1>Otrion Settings</h1><h2>Extensions</h2>
-			<form id="gallery" class="catalog" inert aria-busy="true"><label>Marketplace service URL<input type="url" id="serviceUrl" required></label>
-			<p>Used to search for and install extensions.</p>
-			<label>Marketplace item URL<input type="url" id="itemUrl" required></label><p>Used to open extension pages.</p>
-			<div class="gallery-actions"><button class="primary" type="submit">Save</button><button type="button" id="reset">Restore Open VSX defaults</button>
-			<button type="button" id="reload" hidden>Reload Window</button></div><p id="gallery-status" role="status"></p></form>
-			<h2>Agents</h2>
-			${remote ? `<p class="agent-host">${vscode.l10n.t('Agents run {0}. Install, enable, and sign in here.', agentLocation())}</p>` : ''}
-			<div class="catalog"><input id="search" type="search" placeholder="Search agents…" aria-label="Search agents">
-			<div class="agents">${cards}</div><p id="empty" hidden>No matching agents.</p></div></main><script nonce="${nonce}">${script}</script></body></html>`;
+			</head><body>
+			<nav aria-label="Otrion Settings"><div class="nav-title" title="Otrion Settings"><span class="brand-mark" aria-hidden="true"></span><span>Otrion Settings</span></div>${navigation}</nav>
+			<main><div id="page-general" ${currentPage === 'general' ? '' : 'hidden'}>
+			<h1>General</h1><h2>Extension marketplace</h2>
+			<form id="gallery" class="catalog" inert aria-busy="true">
+			<label for="serviceUrl">Gallery service URL</label><input type="url" id="serviceUrl" required>
+			<label for="itemUrl">Extension page URL</label><input type="url" id="itemUrl" required>
+			<div class="gallery-actions"><button class="primary" type="submit">Save</button><button type="button" id="reset">Reset to Open VSX</button>
+			<button type="button" id="reload" hidden>Reload Window</button></div><p id="gallery-status" role="status"></p></form></div>
+			<div id="page-agents" ${currentPage === 'agents' ? '' : 'hidden'}><h1>Agents</h1>
+			${remote ? `<p class="agent-host">${vscode.l10n.t('Agents run {0}.', agentLocation())}</p>` : ''}
+			<div class="catalog agent-catalog"><div class="agent-search">${icon('M11 11l3 3M12 7a5 5 0 1 1-10 0 5 5 0 1 1 10 0Z')}<input id="search" type="search" placeholder="Search agents…" aria-label="Search agents"></div>
+			<div class="agents">${cards}</div><p id="empty" hidden>No matching agents.</p></div></div></main><script nonce="${nonce}">${script}</script></body></html>`;
 	}), { dispose: () => panel?.dispose() });
 }

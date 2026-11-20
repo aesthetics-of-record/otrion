@@ -450,9 +450,20 @@ function suggest() {
 }
 
 let recentRequest = 0;
+element('home-settings').addEventListener('click', () => post({ type: 'settings' }));
 element('home-new').addEventListener('click', () => post({ type: 'chooseAgent' }));
 
-function renderRecent(items: SessionChoice[], status: string) {
+for (const button of document.querySelectorAll<HTMLButtonElement>('.agent-settings-link')) {
+	button.addEventListener('click', () => post({ type: 'settings', target: button.dataset.target }));
+}
+function historySettings(id: string, target?: string) {
+	const button = element(id);
+	button.hidden = !target;
+	button.dataset.target = target ?? '';
+}
+
+function renderRecent(items: SessionChoice[], status: string, settingsTarget?: string) {
+	historySettings('recent-settings', settingsTarget);
 	const list = element('recent-list');
 	const focused = (document.activeElement as HTMLElement | null)?.dataset.recent;
 	list.replaceChildren();
@@ -523,6 +534,7 @@ window.addEventListener('message', ({ data }) => {
 		if (dismiss) { return; }
 		menuKind = data.menu;
 		sessionChoices = data.items;
+		historySettings('history-settings');
 		historyStatus.textContent = menuKind === 'history' ? 'Loading sessions…' : '';
 		if (menuKind === 'history') { post({ type: 'listHistory', request: ++historyRequest }); }
 		historySearch.value = '';
@@ -534,10 +546,11 @@ window.addEventListener('message', ({ data }) => {
 		sessionMenu.hidden = false;
 		(menuKind === 'history' ? historySearch : sessionMenu.querySelector('button'))?.focus();
 	} else if (data.type === 'historyPage' && data.home) {
-		if (!loaded && data.request === recentRequest) { renderRecent(data.items, data.status); }
+		if (!loaded && data.request === recentRequest) { renderRecent(data.items, data.status, data.settingsTarget); }
 	} else if (data.type === 'historyPage' && !sessionMenu.hidden && menuKind === 'history' && data.request === historyRequest) {
 		sessionChoices = data.items;
 		historyStatus.textContent = data.status;
+		historySettings('history-settings', data.settingsTarget);
 		renderSessionChoices();
 	} else if (data.type === 'dismissHistory' && menuKind === 'history') {
 		showPanel();
@@ -550,9 +563,18 @@ window.addEventListener('message', ({ data }) => {
 		document.querySelector('footer')!.hidden = true;
 		welcome.hidden = false;
 		element('home').hidden = false;
-		element('welcome-title').textContent = 'Otrion Chat';
-		renderRecent([], 'Loading recent conversations…');
-		post({ type: 'listHistory', home: true, request: ++recentRequest });
+		element('home-setup').hidden = !data.needsSetup;
+		element('home-sessions').hidden = data.needsSetup;
+		element('welcome-title').textContent = data.needsSetup ? 'Set up agent chat' : 'Otrion Chat';
+		++recentRequest;
+		if (data.needsSetup) {
+			element('home-instruction').textContent = data.installed
+				? `Enable an installed agent to start chatting ${data.location}.`
+				: `Install and enable Codex or Claude Code to start chatting ${data.location}.`;
+		} else {
+			renderRecent([], 'Loading recent conversations…');
+			post({ type: 'listHistory', home: true, request: recentRequest });
+		}
 	} else if (data.type === 'state') {
 		const follow = nearEnd() || !welcome.hidden;
 		if (tabId !== data.tabId) { messages.replaceChildren(); }
