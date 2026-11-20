@@ -1,6 +1,7 @@
 /* Copyright (c) Otrion contributors. Licensed under the MIT License. */
 
 import { basename, isAbsolute, relative, resolve, sep } from 'node:path';
+import { pathToFileURL } from 'node:url';
 import * as vscode from 'vscode';
 import { AcpClient, type PromptPart, type SessionUpdate } from './acp';
 import { agents, AgentStore, allowed, type AgentId } from './agents';
@@ -28,7 +29,7 @@ export interface SessionRecord {
 export async function workspaceDirectory(context: vscode.ExtensionContext) {
 	const folder = vscode.workspace.workspaceFolders?.[0];
 	if (folder) {
-		if (folder.uri.scheme !== 'file') { throw new Error('Open a local folder to use agent chat with this workspace.'); }
+		if (folder.uri.scheme !== 'file') { throw new Error(vscode.l10n.t('Open a folder on disk or through Remote SSH to use agent chat.')); }
 		return folder.uri.fsPath;
 	}
 	const dir = vscode.Uri.joinPath(context.globalStorageUri, 'empty-workspace');
@@ -279,7 +280,7 @@ export function createSession(context: vscode.ExtensionContext, store: AgentStor
 				parts.push({ type: 'text', text: part.text });
 			} else if (part?.type === 'resource_link' && typeof part.uri === 'string' && part.uri.startsWith('file://')) {
 				const uri = vscode.Uri.parse(part.uri);
-				parts.push({ type: 'resource_link', uri: uri.toString(), name: basename(uri.fsPath) || uri.fsPath });
+				parts.push({ type: 'resource_link', uri: pathToFileURL(uri.fsPath).href, name: basename(uri.fsPath) || uri.fsPath });
 			}
 		}
 		const text = parts.map(part => part.type === 'text' ? part.text : '@' + part.name).join('');
@@ -356,7 +357,7 @@ export function createSession(context: vscode.ExtensionContext, store: AgentStor
 				if (!match?.[1]) { return; }
 				file = match[1];
 				line = match[2] ? Number(match[2]) : undefined;
-				if (file.startsWith('file:///')) { file = vscode.Uri.parse(file).fsPath; }
+				if (file.startsWith('file://')) { file = vscode.Uri.parse(file).fsPath; }
 				else {
 					if ((!isAbsolute(file) && /^[a-z][a-z0-9+.-]*:/i.test(file)) || file.startsWith('//')) { return; }
 					file = decodeURIComponent(file);

@@ -54,4 +54,5 @@ else
   runtime="../$server/node"
 fi
 test "$("$runtime" -p 'process.platform + "-" + process.arch')" = "$platform-$arch"
+OTRION_CHAT_TEST_EXTENSION="../$server/extensions/otrion-chat" "$runtime" --test extensions/otrion-chat/test/remoteChat.test.cjs
 tar -czf "$out/otrion-reh-$platform-$arch.tar.gz" -C .. "$server"
