@@ -282,7 +282,7 @@ export class UpdateContribution extends Disposable implements IWorkbenchContribu
 			case StateType.Ready: {
 				const productVersion = state.update.productVersion;
 				if (productVersion) {
-					const currentVersion = tryParseVersion(this.productService.version);
+					const currentVersion = tryParseVersion(this.productService.otrionVersion ?? this.productService.version);
 					const nextVersion = tryParseVersion(productVersion);
 					this.majorMinorUpdateAvailableContextKey.set(Boolean(currentVersion && nextVersion && isMajorMinorUpdate(currentVersion, nextVersion)));
 				}
@@ -331,6 +331,9 @@ export class UpdateContribution extends Disposable implements IWorkbenchContribu
 		});
 
 		appendUpdateMenuItems(MenuId.GlobalActivity, '7_update');
+		if (!isWeb && this.productService.otrionUpdateRepository) {
+			appendUpdateMenuItems(MenuId.MenubarPreferencesMenu, '8_update');
+		}
 
 		if (this.productService.quality === 'stable') {
 			CommandsRegistry.registerCommand('update.showUpdateReleaseNotes', () => {

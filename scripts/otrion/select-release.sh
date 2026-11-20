@@ -36,4 +36,5 @@ case "${GITHUB_EVENT_NAME}:${GITHUB_REF}" in
     ;;
 esac
 
-printf 'build=%s\npublish=%s\ntag=%s\n' "$build" "$publish" "$tag" >> "$GITHUB_OUTPUT"
+matrix=$(node scripts/otrion/release-targets.mjs matrix "$version")
+printf 'build=%s\npublish=%s\ntag=%s\nmatrix=%s\n' "$build" "$publish" "$tag" "$matrix" >> "$GITHUB_OUTPUT"

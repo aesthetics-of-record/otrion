@@ -184,7 +184,7 @@ if (crashReporterDirectory) {
 
 	crashReporter.start({
 		companyName: 'Microsoft',
-		productName: process.env.VSCODE_DEV ? `${product.nameShort} Dev` : product.nameShort,
+		productName: product.nameShort,
 		uploadToServer: false,
 		compress: true
 	});

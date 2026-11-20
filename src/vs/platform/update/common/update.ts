@@ -10,7 +10,7 @@ import { upcast } from '../../../base/common/types.js';
 import { createDecorator } from '../../instantiation/common/instantiation.js';
 
 export interface IUpdate {
-	version: string; // Build commit ID
+	version: string; // Build identifier, such as a commit ID or a release version
 	productVersion?: string; // Product version like 1.2.3
 	timestamp?: number;
 	url?: string;
@@ -33,7 +33,7 @@ export interface IUpdate {
  *     Downloaded      →     Updating
  *
  * Available: There is an update available for download (linux, darwin on metered connection).
- * Ready: Code will be updated as soon as it restarts (win32, darwin).
+ * Ready: Code will be updated when it restarts on a supported installation.
  * Downloaded: There is an update ready to be installed in the background (win32).
  * Overwriting: A newer update is being downloaded to replace the pending update (darwin).
  * Cancelling: Updates are being disabled at runtime; in-flight/pending work is being torn down before Disabled.

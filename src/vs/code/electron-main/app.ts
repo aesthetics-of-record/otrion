@@ -90,7 +90,7 @@ import { IUpdateService } from '../../platform/update/common/update.js';
 import { UpdateChannel } from '../../platform/update/common/updateIpc.js';
 import { NotAvailableUpdateDialog } from '../../platform/update/electron-main/notAvailableUpdateDialog.js';
 import { DarwinUpdateService } from '../../platform/update/electron-main/updateService.darwin.js';
-import { LinuxUpdateService } from '../../platform/update/electron-main/updateService.linux.js';
+import { ArchiveUpdateService } from '../../platform/update/electron-main/updateService.archive.js';
 import { SnapUpdateService } from '../../platform/update/electron-main/updateService.snap.js';
 import { Win32UpdateService } from '../../platform/update/electron-main/updateService.win32.js';
 import { UnattendedRestartScheduler } from '../../platform/update/electron-main/unattendedRestartScheduler.js';
@@ -1245,12 +1245,14 @@ export class CodeApplication extends Disposable {
 				if (isLinuxSnap) {
 					services.set(IUpdateService, new SyncDescriptor(SnapUpdateService, [process.env['SNAP'], process.env['SNAP_REVISION']]));
 				} else {
-					services.set(IUpdateService, new SyncDescriptor(LinuxUpdateService));
+					services.set(IUpdateService, new SyncDescriptor(ArchiveUpdateService));
 				}
 				break;
 
 			case 'darwin':
-				services.set(IUpdateService, new SyncDescriptor(DarwinUpdateService));
+				services.set(IUpdateService, this.productService.otrionUpdateRepository && !this.productService.otrionMacSignedUpdates
+					? new SyncDescriptor(ArchiveUpdateService)
+					: new SyncDescriptor(DarwinUpdateService));
 				break;
 		}
 

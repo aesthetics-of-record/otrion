@@ -13,7 +13,7 @@ import { IEnvironmentMainService } from '../../environment/electron-main/environ
 import { ILifecycleMainService, IRelaunchHandler, IRelaunchOptions } from '../../lifecycle/electron-main/lifecycleMainService.js';
 import { ILogService } from '../../log/common/log.js';
 import { IProductService } from '../../product/common/productService.js';
-import { asJson, IRequestService } from '../../request/common/request.js';
+import { IRequestService } from '../../request/common/request.js';
 import { IApplicationStorageMainService } from '../../storage/electron-main/storageMainService.js';
 import { ITelemetryService } from '../../telemetry/common/telemetry.js';
 import { AvailableForDownload, IQuitAndInstallOptions, IUpdate, State, StateType, UpdateType } from '../common/update.js';
@@ -45,7 +45,7 @@ export class DarwinUpdateService extends AbstractUpdateService implements IRelau
 		@IApplicationStorageMainService applicationStorageMainService: IApplicationStorageMainService,
 		@IMeteredConnectionService meteredConnectionService: IMeteredConnectionService,
 	) {
-		super(lifecycleMainService, configurationService, environmentMainService, requestService, logService, productService, telemetryService, applicationStorageMainService, meteredConnectionService, true);
+		super(lifecycleMainService, configurationService, environmentMainService, requestService, logService, productService, telemetryService, applicationStorageMainService, meteredConnectionService, !productService.otrionUpdateRepository);
 
 		lifecycleMainService.setRelaunchHandler(this);
 	}
@@ -88,14 +88,15 @@ export class DarwinUpdateService extends AbstractUpdateService implements IRelau
 			return;
 		}
 
-		// only show message when explicitly checking for updates
-		const message = (this.state.type === StateType.CheckingForUpdates && this.state.explicit) ? err : undefined;
+		const message = this.state.explicit ? err : undefined;
 		this.setState(State.Idle(UpdateType.Archive, message));
 	}
 
 	protected buildUpdateFeedUrl(quality: string, commit: string, options?: IUpdateURLOptions): string | undefined {
 		const assetID = this.productService.darwinUniversalAssetId ?? (process.arch === 'x64' ? 'darwin' : 'darwin-arm64');
-		const url = createUpdateURL(this.productService.updateUrl!, assetID, quality, commit, options);
+		const url = this.githubReleaseUrl
+			? `https://update.electronjs.org/${this.productService.otrionUpdateRepository}/darwin-${process.arch}/${this.productService.otrionVersion}`
+			: createUpdateURL(this.productService.updateUrl!, assetID, quality, commit, options);
 		const headers = getUpdateRequestHeaders(this.productService.version);
 		try {
 			this.logService.trace('update#buildUpdateFeedUrl - setting feed URL for Electron autoUpdater', { url, assetID, quality, commit, headers });
@@ -141,15 +142,12 @@ export class DarwinUpdateService extends AbstractUpdateService implements IRelau
 	 * @param canInstall When false, signals that the update cannot be installed from this app.
 	 */
 	private async checkForUpdateNoDownload(url: string, canInstall?: boolean): Promise<void> {
-		const headers = getUpdateRequestHeaders(this.productService.version);
-		this.logService.trace('update#checkForUpdateNoDownload - checking update server', { url, headers });
-
+		const checking = this.state;
 		try {
-			const context = await this.requestService.request({ url, headers, callSite: 'updateService.darwin.checkForUpdates' }, CancellationToken.None);
-			const statusCode = context.res.statusCode;
-			this.logService.trace('update#checkForUpdateNoDownload - response', { statusCode });
-
-			const update = await asJson<IUpdate>(context);
+			const update = await this.fetchUpdate(this.githubReleaseUrl ?? url, 'updateService.darwin.checkForUpdates', CancellationToken.None);
+			if (this.state !== checking) {
+				return;
+			}
 			if (!update || !update.url || !update.version || !update.productVersion) {
 				this.logService.trace('update#checkForUpdateNoDownload - no update available');
 				const notAvailable = this.state.type === StateType.CheckingForUpdates && this.state.explicit;
@@ -160,7 +158,9 @@ export class DarwinUpdateService extends AbstractUpdateService implements IRelau
 			}
 		} catch (err) {
 			this.logService.error('update#checkForUpdateNoDownload - failed to check for update', err);
-			this.setState(State.Idle(UpdateType.Archive));
+			if (this.state === checking) {
+				this.setState(State.Idle(UpdateType.Archive));
+			}
 		}
 	}
 
@@ -179,6 +179,10 @@ export class DarwinUpdateService extends AbstractUpdateService implements IRelau
 			return;
 		}
 
+		if (this.githubReleaseUrl && update.productVersion) {
+			const version = update.productVersion.replace(/^v/, '');
+			update = { ...update, version, productVersion: version };
+		}
 		this.setState(State.Downloaded(update, this.state.explicit, this._overwrite));
 		this.logService.info(`Update downloaded: ${JSON.stringify(update)}`);
 

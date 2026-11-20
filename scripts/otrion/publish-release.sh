@@ -4,17 +4,11 @@ set -euo pipefail
 assets_dir=$1
 tag="$RELEASE_TAG"
 version=${tag#v}
+asset_names=$(node scripts/otrion/release-targets.mjs assets "$version")
 expected=()
-for arch in x64 arm64; do
-  expected+=(
-    "Otrion-$version-windows-$arch-setup.exe"
-    "Otrion-$version-macos-$arch.zip"
-    "Otrion-$version-linux-$arch.tar.gz"
-    "otrion-reh-win32-$arch.tar.gz"
-    "otrion-reh-darwin-$arch.tar.gz"
-    "otrion-reh-linux-$arch.tar.gz"
-  )
-done
+while IFS= read -r name; do
+  expected+=("$name")
+done <<< "$asset_names"
 
 shopt -s nullglob dotglob
 files=("$assets_dir"/*)

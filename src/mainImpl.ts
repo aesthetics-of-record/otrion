@@ -567,7 +567,7 @@ function configureCrashReporter(): void {
 	const uploadToServer = Boolean(!process.env['VSCODE_DEV'] && submitURL && !crashReporterDirectory);
 	crashReporter.start({
 		companyName,
-		productName: process.env['VSCODE_DEV'] ? `${productName} Dev` : productName,
+		productName,
 		submitURL,
 		uploadToServer,
 		compress: true,
