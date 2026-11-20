@@ -19,7 +19,7 @@
 	"serverLicensePrompt": "",
 	"serverApplicationName": "otrion-server",
 	"serverDataFolderName": ".otrion-server",
-	"serverDownloadUrlTemplate": "https://github.com/aesthetics-of-record/otrion/releases/download/v0.1.0/otrion-reh-${os}-${arch}.tar.gz",
+	"serverDownloadUrlTemplate": "https://github.com/aesthetics-of-record/otrion/releases/download/v${otrionVersion}/otrion-reh-${os}-${arch}.tar.gz",
 	"tunnelApplicationName": "otrion-tunnel",
 	"win32DirName": "Otrion",
 	"win32NameVersion": "Otrion",

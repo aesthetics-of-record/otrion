@@ -16,7 +16,8 @@ verify_product() {
     const source = require("./product.json");
     assert.equal(config.commit, process.env.BUILD_SOURCEVERSION);
     assert.equal(config.version, require("./package.json").version);
-    assert.equal(config.serverDownloadUrlTemplate, "https://github.com/aesthetics-of-record/otrion/releases/download/v" + source.otrionVersion + "/otrion-reh-${os}-${arch}.tar.gz");
+    assert.equal(config.otrionVersion, source.otrionVersion);
+    assert.equal(config.serverDownloadUrlTemplate, "https://github.com/aesthetics-of-record/otrion/releases/download/v${otrionVersion}/otrion-reh-${os}-${arch}.tar.gz");
   ' "$1"
 }
 
