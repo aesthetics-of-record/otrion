@@ -18,6 +18,8 @@ const input = element<HTMLElement>('input');
 const send = element<HTMLButtonElement>('send');
 const stopButton = element<HTMLButtonElement>('stop');
 
+let attachedImages: InlineImage[] = [];
+let readingImages = false;
 let agentName = '';
 let connectionIssue: 'setup' | 'connection' | undefined;
 const statusLabel = element('status');
@@ -297,9 +299,10 @@ document.addEventListener('keydown', event => {
 });
 
 function updateComposer() {
-	input.contentEditable = String(loaded);
+	input.contentEditable = loaded ? 'plaintext-only' : 'false';
 	send.hidden = busy;
-	send.disabled = connectionIssue === 'setup' || !allowed || !trusted || !input.textContent.trim() || !loaded || metadata.configuring;
+	send.disabled = readingImages || connectionIssue === 'setup' || !allowed || !trusted || (!attachedImages.length && !input.textContent.trim()) || !loaded || metadata.configuring;
+	element<HTMLButtonElement>('attach-image').disabled = readingImages || !allowed || !trusted || busy || !loaded;
 	element<HTMLButtonElement>('attach').disabled = !allowed || !trusted || busy || !loaded;
 	stopButton.hidden = !busy;
 	modeButton.disabled = modelButton.disabled = !allowed || !trusted || connectionIssue === 'setup';
@@ -326,9 +329,52 @@ function renderSetup(status: string, location: string, activity?: string) {
 	setup.classList.toggle('retry-first', connectionIssue === 'connection' && trusted && allowed);
 }
 
+function renderImageStrip() {
+	const strip = element('attached-images');
+	const previews = attachedImages.map(image => ({ label: image.name, image: 'data:' + image.mimeType + ';base64,' + image.data }));
+	strip.hidden = !previews.length;
+	strip.replaceChildren(...previews.map((image, index) => {
+		const item = document.createElement('div');
+		item.className = 'attached-image';
+		const remove = document.createElement('button');
+		remove.type = 'button';
+		remove.className = 'remove-image';
+		remove.title = 'Remove ' + image.label;
+		remove.setAttribute('aria-label', remove.title);
+		remove.textContent = '×';
+		remove.addEventListener('click', event => {
+			attachedImages.splice(index, 1);
+			renderImageStrip();
+			saveDraft();
+			const nextThumbnail = strip.children[Math.min(index, attachedImages.length - 1)]?.querySelector('button');
+			if (!event.detail && nextThumbnail) { nextThumbnail.focus(); }
+			else { placeRange(input, lastCaret); }
+		});
+		item.append(imageThumbnail(previews, index), remove);
+		return item;
+	}));
+}
+
+function renderDraft(draft: Draft) {
+	attachedImages = [];
+	input.replaceChildren();
+	if (typeof draft === 'string') { input.textContent = draft; }
+	else {
+		for (const part of draft) {
+			if (part.type === 'image') { attachedImages.push(part); }
+			else { input.append(part.type === 'text' ? part.text : resourceChip(part)); }
+		}
+	}
+	renderImageStrip();
+}
+
+function composerDraft() {
+	return [...attachedImages, ...readDraft(input)];
+}
+
 function saveDraft() {
 	if (tabId) {
-		drafts[tabId] = readDraft(input);
+		drafts[tabId] = composerDraft();
 		api.setState({ drafts });
 		post({ type: 'draft', parts: drafts[tabId] });
 	}
@@ -396,7 +442,8 @@ function selectSuggestion(choice: Suggestion) {
 	hideSuggestions();
 	saveDraft();
 	input.focus();
-	if (choice.action === 'attach' || choice.action === 'folder') { requestResources({ type: 'attach', folder: choice.action === 'folder' }); }
+	if (choice.action === 'image') { element('image-picker').click(); }
+	else if (choice.action === 'attach' || choice.action === 'folder') { requestResources({ type: 'attach', folder: choice.action === 'folder' }); }
 	else if (choice.action === 'mode' || choice.action === 'model') { openSettingsMenu(choice.action); }
 }
 
@@ -426,7 +473,7 @@ function renderSuggestions(items: Suggestion[], empty: string) {
 
 function commandChoices(query: string) {
 	const commands: Suggestion[] = [...(metadata.commands ?? [])].map(c => ({ label: c.name, description: c.description }));
-	for (const [action, description] of [['attach', 'Attach files'], ['folder', 'Attach folders'], ['mode', 'Choose agent mode'], ['model', 'Choose model']]) {
+	for (const [action, description] of [['image', 'Add images from this device'], ['attach', 'Attach files'], ['folder', 'Attach folders'], ['mode', 'Choose agent mode'], ['model', 'Choose model']]) {
 		if (!commands.some(c => c.label === action)) { commands.push({ label: action, action, description }); }
 	}
 	return commands.filter(c => c.label.toLowerCase().startsWith(query.toLowerCase()));
@@ -520,15 +567,17 @@ window.addEventListener('message', ({ data }) => {
 			hideSuggestions();
 			saveDraft();
 		} else {
-			drafts[target.tab] = [...target.before, ...data.parts, ...target.after];
+			const draft = drafts[target.tab];
+			const images = Array.isArray(draft) ? draft.filter(part => part.type === 'image') : [];
+			drafts[target.tab] = [...images, ...target.before, ...data.parts, ...target.after];
 			api.setState({ drafts });
 		}
 	} else if (data.type === 'forgetDraft') {
 		delete drafts[data.tabId];
 		api.setState({ drafts });
 	} else if (data.type === 'restoreDraft') {
-		if (data.tabId === tabId && !input.textContent) {
-			renderDraft(input, data.parts);
+		if (data.tabId === tabId && !input.textContent && !attachedImages.length) {
+			renderDraft(data.parts);
 			saveDraft();
 		} else if (data.tabId !== tabId && !drafts[data.tabId]?.length) {
 			drafts[data.tabId] = data.parts;
@@ -603,7 +652,7 @@ window.addEventListener('message', ({ data }) => {
 			showPanel();
 			tabId = data.tabId;
 			lastCaret = undefined;
-			renderDraft(input, drafts[tabId] ?? '');
+			renderDraft(drafts[tabId] ?? '');
 		}
 		updateMetadata(data);
 		connectionIssue = data.connectionIssue;
@@ -625,13 +674,13 @@ element('retry-connection').addEventListener('click', () => post({ type: 'option
 element('configure').addEventListener('click', () => post({ type: trusted ? 'settings' : 'trust' }));
 document.querySelector('form')!.addEventListener('submit', event => {
 	event.preventDefault();
-	if (!loaded || send.disabled || busy || metadata.configuring || !input.textContent.trim()) { return; }
+	if (send.disabled || busy) { return; }
 	showPanel();
 	busy = true;
 	renderStatus('', 'Working');
 	for (const [id, target] of insertions) { if (target.tab === tabId) { insertions.delete(id); } }
-	post({ type: 'send', parts: readDraft(input) });
-	input.replaceChildren();
+	post({ type: 'send', parts: composerDraft() });
+	renderDraft('');
 	lastCaret = undefined;
 	saveDraft();
 	input.focus();
@@ -655,9 +704,53 @@ input.addEventListener('keydown', event => {
 		input.closest('form')?.requestSubmit();
 	}
 });
+async function addImages(files: File[]) {
+	if (!files.length || readingImages || !tabId || !trusted || !allowed) { return; }
+	const owner = tabId;
+	drafts[owner] ??= [];
+	const existing = attachedImages.reduce((bytes, image) => bytes + Math.floor(image.data.replace(/=+$/, '').length * 3 / 4), 0);
+	if (files.some(f => !/^image\/(png|jpeg|gif|webp)$/.test(f.type) || !f.size) || files.reduce((n, f) => n + f.size, existing) > 4 * 1024 * 1024) {
+		renderStatus('Use PNG, JPEG, GIF or WebP images, up to 4 MB per message.');
+		return;
+	}
+	readingImages = true;
+	updateComposer();
+	try {
+		const images = await Promise.all(files.map(file => new Promise<InlineImage>((resolve, reject) => {
+			const reader = new FileReader();
+			reader.onload = () => resolve({ type: 'image', name: file.name || 'Image', mimeType: file.type, data: String(reader.result).split(',')[1] });
+			reader.onerror = () => reject(reader.error);
+			reader.readAsDataURL(file);
+		})));
+		if (owner === tabId) {
+			attachedImages.push(...images);
+			renderImageStrip();
+			saveDraft();
+		} else if (owner in drafts) {
+			const draft = drafts[owner];
+			drafts[owner] = [...(typeof draft === 'string' ? [{ type: 'text' as const, text: draft }] : draft), ...images];
+			api.setState({ drafts });
+		}
+	} catch {
+		if (owner === tabId) { renderStatus('Could not read the image. Try attaching it again.'); }
+	} finally {
+		readingImages = false;
+		updateComposer();
+	}
+}
+const imagePicker = element<HTMLInputElement>('image-picker');
+element('attach-image').addEventListener('click', () => imagePicker.click());
+imagePicker.addEventListener('change', () => {
+	placeRange(input, lastCaret);
+	void addImages(Array.from(imagePicker.files ?? []));
+	imagePicker.value = '';
+});
 input.addEventListener('paste', event => {
-	event.preventDefault();
-	document.execCommand('insertText', false, event.clipboardData?.getData('text/plain') ?? '');
+	const images = Array.from(event.clipboardData?.files ?? []).filter(file => file.type.startsWith('image/'));
+	if (images.length) {
+		event.preventDefault();
+		void addImages(images);
+	}
 });
 input.addEventListener('input', () => { saveDraft(); suggest(); });
 input.addEventListener('click', suggest);

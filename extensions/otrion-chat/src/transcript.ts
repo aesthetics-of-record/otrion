@@ -60,7 +60,7 @@ function contentText(block: ContentBlock) {
 }
 function imageSource(block: ContentBlock) {
 	if (block.type === 'image' && /^image\/(png|jpeg|gif|webp)$/.test(block.mimeType ?? '')
-		&& typeof block.data === 'string' && block.data.length <= 2_800_000) {
+		&& typeof block.data === 'string' && block.data.length <= 5_592_408) {
 		return 'data:' + block.mimeType + ';base64,' + block.data;
 	}
 	return undefined;

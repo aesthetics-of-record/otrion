@@ -297,29 +297,40 @@ export function createSession(context: vscode.ExtensionContext, store: AgentStor
 			return;
 		}
 		const parts: PromptPart[] = [];
+		const images: NonNullable<ChatMessage['artifacts']> = [];
 		for (const part of input) {
 			if (part?.type === 'text' && typeof part.text === 'string') {
 				parts.push({ type: 'text', text: part.text });
+			} else if (part?.type === 'image' && typeof part.data === 'string' && part.data.length > 0 && part.data.length <= 5592408 && /^image\/(png|jpeg|webp|gif)$/.test(part.mimeType)) {
+				parts.push({ type: 'image', mimeType: part.mimeType, data: part.data });
+				images.push({ label: typeof part.name === 'string' && part.name ? part.name : 'Image', image: 'data:' + part.mimeType + ';base64,' + part.data });
 			} else if (part?.type === 'resource_link' && typeof part.uri === 'string' && part.uri.startsWith('file://')) {
 				const uri = vscode.Uri.parse(part.uri);
 				parts.push({ type: 'resource_link', uri: pathToFileURL(uri.fsPath).href, name: basename(uri.fsPath) || uri.fsPath });
 			}
 		}
-		const text = parts.map(part => part.type === 'text' ? part.text : '@' + part.name).join('');
-		if (!text.trim()) { snapshot(); return; }
+		const text = parts.map(part => part.type === 'text' ? part.text : part.type === 'image' ? '' : '@' + part.name).join('');
+		if (!text.trim() && !images.length) { snapshot(); return; }
 		const id = selected;
 		const active: Turn = { activity: client && !client.closed ? 'Working' : 'Connecting', cancelled: false, prompting: false, start: messages.length };
 		turn = active;
 		connectionIssue = undefined;
-		const pendingMessage = { role: 'You', text };
+		const pendingMessage: ChatMessage = { role: 'You', text };
+		if (images.length) { pendingMessage.artifacts = images; }
 		messages.push(pendingMessage);
 		status = '';
 		snapshot();
 		try {
 			const session = await connect(id, pendingMessage);
 			if (active.cancelled || !allowed(id)) { return; }
-			record.pendingFirstPrompt = false;
 			active.start = messages.length;
+			if (!session.supportsImages && parts.some(part => part.type === 'image')) {
+				if (messages.at(-1) === pendingMessage) { messages.pop(); }
+				status = 'This agent does not accept images. Remove the image or use an image-capable agent.';
+				emit({ type: 'restoreDraft', tabId: record.id, parts: input });
+				return;
+			}
+			record.pendingFirstPrompt = false;
 			active.prompting = true;
 			active.activity = 'Working';
 			snapshot();

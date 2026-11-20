@@ -74,12 +74,13 @@ test('Remote SSH agents use the host runtime, credentials and file paths', async
 			require('node:readline').createInterface({ input: process.stdin }).on('line', line => {
 				const { id, method, params } = JSON.parse(line);
 				let result = { stopReason: 'end_turn' };
-				if (method === 'initialize') result = { protocolVersion: 1 };
+				if (method === 'initialize') result = { protocolVersion: 1, agentCapabilities: { promptCapabilities: { image: true } } };
 				if (method === 'session/new') {
 					assert.equal(fs.realpathSync(params.cwd), fs.realpathSync(process.cwd()));
 					result = { sessionId: 'fixture' };
 				}
 				if (method === 'session/prompt') {
+					assert.deepEqual(params.prompt[1], { type: 'image', mimeType: 'image/png', data: 'aW1n' });
 					assert.equal(fs.realpathSync(fileURLToPath(params.prompt[0].uri)), fs.realpathSync('notes #1.md'));
 					assert.equal(params.prompt[0].name, 'notes #1.md');
 				}
@@ -123,8 +124,8 @@ test('Remote SSH agents use the host runtime, credentials and file paths', async
 				assert.equal(states.at(-1).connected, true);
 				// VS Code may encode the Windows drive colon. The ACP agent expects a standard file URL.
 				const resource = pathToFileURL(attached).href.replace(/^file:\/\/\/([a-z]):/i, 'file:///$1%3A');
-				await session.send([{ type: 'resource_link', uri: resource }]);
-				assert.deepEqual(record.messages, [{ role: 'You', text: '@notes #1.md' }]);
+				await session.send([{ type: 'resource_link', uri: resource }, { type: 'image', mimeType: 'image/png', data: 'aW1n' }]);
+				assert.deepEqual(record.messages, [{ role: 'You', text: '@notes #1.md', artifacts: [{ label: 'Image', image: 'data:image/png;base64,aW1n' }] }]);
 				assert.equal(record.remoteId, 'fixture');
 			} finally {
 				session.dispose();

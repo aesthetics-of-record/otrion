@@ -37,7 +37,7 @@ export interface SessionUpdate {
 	content?: ContentBlock | ToolContent[];
 }
 
-export type PromptPart = { type: 'text'; text: string } | { type: 'resource_link'; uri: string; name: string };
+export type PromptPart = { type: 'image'; mimeType: string; data: string } | { type: 'text'; text: string } | { type: 'resource_link'; uri: string; name: string };
 
 export interface AgentSessionInfo {
 	sessionId: string;
@@ -50,7 +50,7 @@ interface AcpResult {
 	sessions?: AgentSessionInfo[];
 	nextCursor?: string | null;
 	configOptions?: unknown;
-	agentCapabilities?: { loadSession?: boolean; sessionCapabilities?: { list?: object } };
+	agentCapabilities?: { promptCapabilities?: { image?: boolean }; loadSession?: boolean; sessionCapabilities?: { list?: object } };
 	protocolVersion?: number;
 	sessionId?: string;
 	stopReason?: string;
@@ -93,6 +93,8 @@ export class AcpClient {
 		this.#process.on('close', code => this.dispose(new Error(`ACP agent disconnected (${code ?? 'terminated'}).`)));
 	}
 
+	supportsImages = false;
+
 	async #initialize(version: string) {
 		const result = await this.#request('initialize', {
 			protocolVersion: 1,
@@ -105,6 +107,7 @@ export class AcpClient {
 		if (result?.protocolVersion !== 1) {
 			throw new Error('ACP agent did not negotiate protocol version 1.');
 		}
+		this.supportsImages = result.agentCapabilities?.promptCapabilities?.image === true;
 		return result.agentCapabilities;
 	}
 

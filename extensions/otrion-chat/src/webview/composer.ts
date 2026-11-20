@@ -1,7 +1,8 @@
 /* Copyright (c) Otrion contributors. Licensed under the MIT License. */
 
 type InlineResource = { type: 'resource_link'; uri: string; name: string; folder?: boolean };
-type DraftPart = { type: 'text'; text: string } | InlineResource;
+type InlineImage = { type: 'image'; name: string; mimeType: string; data: string };
+type DraftPart = { type: 'text'; text: string } | InlineResource | InlineImage;
 type Draft = string | DraftPart[];
 
 let iconSequence = 0;
@@ -27,6 +28,24 @@ function resourceChip(file: InlineResource) {
 	return chip;
 }
 
+type PreviewImage = { label: string; image: string };
+
+function imageThumbnail(images: PreviewImage[], index: number) {
+	const { label, image } = images[index];
+	const button = document.createElement('button');
+	button.type = 'button';
+	button.className = 'image-thumbnail';
+	button.title = label;
+	button.setAttribute('aria-label', 'Preview ' + label + ' (' + (index + 1) + ' of ' + images.length + ')');
+	const img = document.createElement('img');
+	img.src = image;
+	img.alt = '';
+	img.draggable = false;
+	button.append(img);
+	button.addEventListener('click', () => post({ type: 'previewImages', images, startIndex: index }));
+	return button;
+}
+
 function readDraft(root: Node): DraftPart[] {
 	const parts: DraftPart[] = [];
 	const append = (text: string) => {
@@ -50,12 +69,6 @@ function readDraft(root: Node): DraftPart[] {
 	}
 	visit(root);
 	return parts;
-}
-
-function renderDraft(root: HTMLElement, draft: Draft) {
-	root.replaceChildren();
-	if (typeof draft === 'string') { root.textContent = draft; return; }
-	for (const part of draft) { root.append(part.type === 'text' ? part.text : resourceChip(part)); }
 }
 
 function currentRange(root: HTMLElement) {
@@ -84,7 +97,14 @@ function insertChips(root: HTMLElement, parts: InlineResource[], range?: Range) 
 	const chips = parts.map(resourceChip);
 	const marker = crypto.randomUUID();
 	chips[chips.length - 1].dataset.insertEnd = marker;
-	document.execCommand('insertHTML', false, chips.map(chip => chip.outerHTML).join(''));
+	// Only our own file tokens need rich insertion. Native paste stays plain text.
+	const editable = root.contentEditable;
+	root.contentEditable = 'true';
+	try {
+		document.execCommand('insertHTML', false, chips.map(chip => chip.outerHTML).join(''));
+	} finally {
+		root.contentEditable = editable;
+	}
 	const end = root.querySelector<HTMLElement>('[data-insert-end="' + marker + '"]');
 	if (end) {
 		delete end.dataset.insertEnd;

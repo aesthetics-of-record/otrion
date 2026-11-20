@@ -71,7 +71,13 @@ form:focus-within { border-color: var(--vscode-focusBorder); }
 	display: block; width: 100%; border: 0; outline: none !important; padding: 3px 3px 5px; line-height: 20px; resize: none;
 	background: transparent; color: var(--vscode-input-foreground); font-size: 13px;
 }
-#input:empty::before, #input:has(> br:only-child)::before { content: attr(data-placeholder); pointer-events: none; color: var(--vscode-input-placeholderForeground); }
+.composer-text { display: grid; }
+#input, .composer-placeholder { grid-area: 1 / 1; min-width: 0; }
+.composer-placeholder {
+	padding: 3px 3px 5px; pointer-events: none; user-select: none;
+	color: var(--vscode-input-placeholderForeground); font-size: 13px; line-height: 20px;
+}
+#input:not(:empty):not(:has(> br:only-child)) + .composer-placeholder { display: none; }
 .controls { display: flex; align-items: center; gap: 4px; margin-top: 5px; min-width: 0; }
 #mode, #model { min-width: 0; height: 24px; padding: 0 6px; border: 0; border-radius: 4px; background: transparent; color: var(--muted); font-size: 11px; line-height: 24px; white-space: nowrap; text-overflow: ellipsis; overflow: hidden; }
 #context { flex: none; margin-left: auto; }
@@ -224,6 +230,25 @@ details[open] > .activity-heading svg { transform: rotate(90deg); }
 .hljs-title, .hljs-section { color: var(--vscode-symbolIcon-functionForeground); }
 .hljs-comment { color: var(--muted); font-style: italic; }
 
+.image-strip {
+	display: flex; gap: 7px; align-items: center; overflow-x: auto;
+	padding: 4px; scrollbar-width: thin; scrollbar-color: var(--vscode-scrollbarSlider-background) transparent;
+}
+.attached-image { position: relative; flex: none; }
+.image-thumbnail {
+	display: block; flex: none; width: 48px; height: 48px; padding: 0; overflow: hidden;
+	border: 1px solid var(--line); border-radius: 7px; cursor: zoom-in; background: var(--surface);
+}
+.image-thumbnail:hover { border-color: var(--vscode-focusBorder); }
+.image-thumbnail img { display: block; width: 100%; height: 100%; object-fit: cover; }
+.remove-image {
+	position: absolute; inset: -3px -3px auto auto; display: grid; place-items: center;
+	width: 18px; height: 18px; padding: 0; border-radius: 50%; border: 1px solid var(--line);
+	color: var(--vscode-foreground); background: var(--surface); font: 15px/1 sans-serif; opacity: 0;
+}
+.attached-image:hover .remove-image, .attached-image:focus-within .remove-image { opacity: 1; }
+.remove-image:hover { background: var(--vscode-button-secondaryBackground, var(--surface)); }
+@media (hover: none) { .remove-image { opacity: 1; } }
 article.user { position: relative; }
 .user:has(> .transcript-action) > .message-body { padding-inline-end: 36px; }
 .user > .transcript-action {

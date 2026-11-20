@@ -94,6 +94,16 @@ export class ElectronWebviewElement extends WebviewElement {
 		return `${Schemas.vscodeWebview}://${iframeId}`;
 	}
 
+	public override paste(): void {
+		if (this.element && this.isFocused) {
+			// Route the user gesture to the focused frame, just as the editor does.
+			// Chromium can decline document.execCommand('paste') inside a webview.
+			void this._nativeHostService.triggerPaste({ targetWindowId: getWindow(this.element).vscodeWindowId }).catch(onUnexpectedError);
+		} else {
+			super.paste();
+		}
+	}
+
 	private get findTarget(): WebviewWebContentsId | WebviewWindowId {
 		const targetWindow = getWindow(this.element);
 		return isAuxiliaryWindow(targetWindow)

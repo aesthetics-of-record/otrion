@@ -7,6 +7,7 @@ export function chatHtml(web: vscode.Webview, media: vscode.Uri, scripts: vscode
 	const nonce = randomBytes(16).toString('base64');
 	const resource = (dir: vscode.Uri, file: string) => web.asWebviewUri(vscode.Uri.joinPath(dir, file));
 	const icon = (path: string) => `<svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="${path}"/></svg>`;
+	const placeholder = 'Ask about your code, @ for context, / for commands…';
 	const arrow = icon('M12 19V5m-6 6 6-6 6 6');
 	return `<!doctype html>
 <html lang="en"><head><meta charset="utf-8">
@@ -51,6 +52,7 @@ export function chatHtml(web: vscode.Webview, media: vscode.Uri, scripts: vscode
 	</section>
 	<div id="agent-drop" hidden><span>Drop to add to agent</span></div>
 	<footer hidden>
+		<input id="image-picker" type="file" accept="image/png,image/jpeg,image/webp,image/gif" multiple hidden>
 		<div id="status" role="status"></div>
 		<section id="setup" aria-labelledby="setup-title" hidden>
 			<div role="status"><strong id="setup-title"></strong><p id="setup-text"></p></div>
@@ -69,13 +71,18 @@ export function chatHtml(web: vscode.Webview, media: vscode.Uri, scripts: vscode
 		</section>
 		<section id="suggestions" class="popover menu-choices" role="listbox" aria-label="Composer suggestions" hidden></section>
 		<form aria-label="Message composer">
-			<div id="input" contenteditable="true" role="textbox" aria-multiline="true" aria-label="Chat message" aria-controls="suggestions" aria-autocomplete="list" data-placeholder="Ask about your code, @ for context, / for commands…"></div>
+			<div id="attached-images" class="image-strip" role="group" aria-label="Attached images" hidden></div>
+			<div class="composer-text">
+				<div id="input" contenteditable="plaintext-only" role="textbox" aria-multiline="true" aria-label="Chat message" aria-controls="suggestions" aria-autocomplete="list" aria-placeholder="${placeholder}"></div>
+				<span class="composer-placeholder" aria-hidden="true">${placeholder}</span>
+			</div>
 			<div class="controls">
 				<button id="mode" type="button" aria-label="Agent mode" aria-controls="mode-panel" aria-expanded="false" title="Agent mode">Mode</button>
 				<button id="model" type="button" aria-controls="model-panel" aria-expanded="false" aria-label="Model settings"><span id="model-name">Model</span></button>
 				<button id="context" type="button" class="icon-button" aria-controls="context-panel" aria-expanded="false" aria-label="Session context">
 					<svg viewBox="0 0 20 20" aria-hidden="true"><circle cx="10" cy="10" r="7" class="track"/><circle id="usage-ring" cx="10" cy="10" r="7" pathLength="100" stroke-dasharray="0 100" transform="rotate(-90 10 10)"/></svg>
 				</button>
+				<button id="attach-image" type="button" class="icon-button" aria-label="Attach images" title="Attach images">${icon('M3 5h18v14H3z M3 16l5-5 4 4 3-3 6 6 M16 9h.01')}</button>
 				<button id="attach" type="button" class="icon-button" aria-label="Attach files" title="Attach files">${icon('M8 13l7-7a3 3 0 0 1 4.2 4.2l-9 9a5 5 0 0 1-7.1-7.1l9.2-9.2m-6.2 12.2a1.4 1.4 0 0 0 2 2l8.4-8.4')}</button>
 				<button id="send" class="primary" type="submit" aria-label="Send message" title="Send message (Enter)" disabled>${arrow}</button>
 				<button id="stop" class="primary" type="button" aria-label="Stop response" title="Stop response" hidden><span class="square"></span></button>
