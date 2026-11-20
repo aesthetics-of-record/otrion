@@ -45,6 +45,9 @@ pre { overflow-x: auto; padding: 10px; margin: 0; font: 12px/1.55 var(--mono); }
 pre code { font: inherit; }
 footer { position: relative; flex: none; padding: 0 10px 9px; }
 #setup, #status { margin: 0 2px 7px; font-size: 12px; color: var(--muted); }
+#resume-warning { margin: 0 3px 7px; color: var(--vscode-editorWarning-foreground, var(--muted)); font-size: 12px; overflow-wrap: anywhere; }
+#resume-warning summary { cursor: pointer; }
+#resume-warning-detail { margin: 4px 0 0 14px; color: var(--muted); }
 #status:empty { display: none; }
 #status.working { display: flex; align-items: center; gap: 7px; min-height: 22px; padding-inline: 3px; }
 #status.working::before {

@@ -35,7 +35,16 @@ function activityForRow(row: ChatMessage) {
 	}
 }
 
+// Codex currently sends its resume-model hint as a human-readable ACP notice.
+function recordedModelFromNotice(title?: string, description?: string) {
+	const pattern = /^This session was recorded with model `([^`\n]+)`,?\s+but is resuming with `[^`\n]+`/i;
+	return pattern.exec(title ?? '')?.[1] ?? pattern.exec(description ?? '')?.[1];
+}
+
 export interface SessionRecord {
+	options?: Record<string, string | boolean>;
+	pendingModel?: string;
+	recordedModel?: string;
 	id: string;
 	agent: AgentId;
 	messages: ChatMessage[];
@@ -66,6 +75,15 @@ export function createSession(context: vscode.ExtensionContext, store: AgentStor
 	let connectedRevision = -1;
 	let turn: Turn | undefined;
 	const messages = record.messages;
+	// Older Otrion versions persisted these transient notices as transcript rows.
+	for (let index = messages.length - 1; index >= 0; index--) {
+		const row = messages[index];
+		const model = row.kind === 'notice' && recordedModelFromNotice(row.title, row.text);
+		if (model) {
+			record.recordedModel ??= model;
+			messages.splice(index, 1);
+		}
+	}
 	let disposed = false;
 	let status = '';
 	let connectionIssue: 'setup' | 'connection' | undefined;
@@ -75,9 +93,13 @@ export function createSession(context: vscode.ExtensionContext, store: AgentStor
 	let configuring = false;
 	let commands: { name: string; description?: string }[] = [];
 	const preferenceKey = 'sessionOptions.v1.' + selected;
+	function saveSessionOptions() {
+		if (options.length) { record.options = Object.fromEntries(options.map(option => [option.id, option.current])); }
+	}
 	function rememberOptions() {
 		if (!options.length) { return; }
-		return context.globalState.update(preferenceKey, Object.fromEntries(options.map(option => [option.id, option.current])));
+		saveSessionOptions();
+		return context.globalState.update(preferenceKey, record.options);
 	}
 
 	function supports(option: SessionOption, value: unknown): value is string | boolean {
@@ -85,7 +107,7 @@ export function createSession(context: vscode.ExtensionContext, store: AgentStor
 	}
 
 	function metadata() {
-		return { options, commands, usage, configuring, connected: !!client && !client.closed,
+		return { options, commands, usage, configuring, recordedModel: record.recordedModel, connected: !!client && !client.closed,
 			workspace: record.cwd ? basename(record.cwd) : vscode.workspace.workspaceFolders?.[0]?.name };
 	}
 
@@ -174,6 +196,14 @@ export function createSession(context: vscode.ExtensionContext, store: AgentStor
 		let replay: ChatMessage[] | undefined = previousId ? [] : undefined;
 		const session: AcpClient = new AcpClient(id, launch.command, launch.args, cwd, env, update => {
 			if (client !== session) { return; }
+			if (update.sessionUpdate === 'notice') {
+				const model = recordedModelFromNotice(update.title, update.description);
+				if (model) {
+					record.recordedModel = model;
+					if (!replay) { publishMetadata(); }
+					return;
+				}
+			}
 			if (replay && applyTranscriptUpdate(replay, agents[id].name, update) !== undefined) { return; }
 			onUpdate(agents[id].name, update);
 		});
@@ -184,16 +214,18 @@ export function createSession(context: vscode.ExtensionContext, store: AgentStor
 			record.remoteId = await session.initialize(cwd, context.extension.packageJSON.version, previousId);
 			record.pendingFirstPrompt = isNew;
 			record.cwd = cwd;
-			if (isNew) {
-				const preferences = context.globalState.get<Record<string, string | boolean>>(preferenceKey, {});
-				for (const kind of ['mode', 'model', 'reasoning', 'fast']) {
-					const option = options.find(item => item.kind === kind);
-					if (!option) { continue; }
-					const saved = preferences[option.id];
-					if (saved !== option.current && supports(option, saved)) {
-						try { await session.setOption(option.id, saved); }
-						catch (error) { if (session.closed) { throw error; } }
-					}
+			const preferences = record.options ?? (isNew ? context.globalState.get<Record<string, string | boolean>>(preferenceKey, {}) : {});
+			const loadedOptions = options.slice();
+			for (const kind of ['mode', 'model', 'reasoning', 'fast'] as const) {
+				// Switching models can change the available reasoning and fast-mode choices.
+				const option = options.find(item => item.kind === kind);
+				if (!option) { continue; }
+				const candidates = previousId && kind === 'model' ? [record.pendingModel, record.recordedModel, preferences[option.id]] : [preferences[option.id]];
+				candidates.push(loadedOptions.find(item => item.id === option.id)?.current);
+				const saved = candidates.find(value => supports(option, value));
+				if (saved !== undefined && saved !== option.current) {
+					try { await session.setOption(option.id, saved); }
+					catch (error) { if (session.closed) { throw error; } }
 				}
 			}
 			if (replay?.length) {
@@ -226,6 +258,7 @@ export function createSession(context: vscode.ExtensionContext, store: AgentStor
 					throw new Error('This option has changed. Choose an available value.');
 				}
 				await session.setOption(option.id, value);
+				if (option.kind === 'model' && typeof value === 'string') { record.pendingModel = value; }
 				await rememberOptions();
 			}
 		} catch (error) {
@@ -333,9 +366,14 @@ export function createSession(context: vscode.ExtensionContext, store: AgentStor
 			record.pendingFirstPrompt = false;
 			active.prompting = true;
 			active.activity = 'Working';
-			snapshot();
 			void rememberOptions();
+			snapshot();
 			const result = await session.prompt(parts);
+			if (result?.stopReason === 'end_turn') {
+				delete record.recordedModel;
+				delete record.pendingModel;
+				saveSessionOptions();
+			}
 			status = result?.stopReason === 'end_turn' ? '' : 'Turn ended (' + (result?.stopReason ?? 'unknown reason') + ').';
 		} catch (error) {
 			disconnect();

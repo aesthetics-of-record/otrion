@@ -71,13 +71,35 @@ test('Remote SSH agents use the host runtime, credentials and file paths', async
 			const assert = require('node:assert/strict');
 			const fs = require('node:fs');
 			const { fileURLToPath } = require('node:url');
+			const values = { model: 'sol', effort: 'medium', fast: false, mode: 'read-only' };
+			const choices = { model: ['sol', 'astra'], effort: ['medium', 'high'], mode: ['read-only', 'plan'] };
+			const configOptions = () => Object.entries(values).map(([id, currentValue]) => ({
+				id, currentValue, category: id === 'effort' ? 'thought_level' : id,
+				type: id === 'fast' ? 'boolean' : 'select',
+				options: choices[id]?.map(value => ({ value, name: value }))
+			}));
 			require('node:readline').createInterface({ input: process.stdin }).on('line', line => {
 				const { id, method, params } = JSON.parse(line);
 				let result = { stopReason: 'end_turn' };
-				if (method === 'initialize') result = { protocolVersion: 1, agentCapabilities: { promptCapabilities: { image: true } } };
+				if (method === 'initialize') result = { protocolVersion: 1, agentCapabilities: { loadSession: true, promptCapabilities: { image: true } } };
 				if (method === 'session/new') {
 					assert.equal(fs.realpathSync(params.cwd), fs.realpathSync(process.cwd()));
 					result = { sessionId: 'fixture' };
+				}
+				if (method === 'session/load') {
+					if (params.sessionId === 'codex-history') {
+						const title = ${JSON.stringify('This session was recorded with model `astra` but is resuming with `sol`.')};
+						for (const message of [title, 'Unrelated warning']) {
+							console.log(JSON.stringify({ jsonrpc: '2.0', method: 'session/update', params: { sessionId: params.sessionId,
+								update: { sessionUpdate: 'notice', severity: 'warning', title: message } } }));
+						}
+					}
+					result = { configOptions: configOptions() };
+				}
+				if (method === 'session/set_config_option') {
+					values[params.configId] = params.value;
+					if (params.configId === 'model') { values.effort = 'medium'; values.fast = false; }
+					result = { configOptions: configOptions() };
 				}
 				if (method === 'session/prompt') {
 					assert.deepEqual(params.prompt[1], { type: 'image', mimeType: 'image/png', data: 'aW1n' });
@@ -129,6 +151,30 @@ test('Remote SSH agents use the host runtime, credentials and file paths', async
 				assert.equal(record.remoteId, 'fixture');
 			} finally {
 				session.dispose();
+			}
+			const resumed = { id: agent, agent, remoteId: agent + '-history', messages: [],
+				options: agent === 'codex' ? { effort: 'high', fast: true, mode: 'plan' } : { model: 'astra', effort: 'high' } };
+			const resume = () => createSession(context, runtime, resumed, msg => states.push(msg), () => {});
+			let reopened = resume();
+			try {
+				await reopened.configure();
+				assert.equal(states.at(-1).connectionIssue, undefined);
+				assert.deepEqual(Object.fromEntries(states.at(-1).options.map(o => [o.id, o.current])), {
+					model: 'astra', effort: 'high', fast: agent === 'codex', mode: agent === 'codex' ? 'plan' : 'read-only'
+				});
+				if (agent === 'codex') {
+					assert.equal(states.at(-1).recordedModel, 'astra');
+					assert.deepEqual(resumed.messages.map(m => m.title), ['Unrelated warning']);
+				}
+				await reopened.configure({ id: 'model', value: 'sol' });
+				reopened.dispose();
+				reopened = resume();
+				await reopened.configure();
+				assert.equal(states.at(-1).options.find(o => o.kind === 'model').current, 'sol');
+				await reopened.configure({ id: 'model', value: 'astra' });
+				assert.equal(states.at(-1).options.find(o => o.kind === 'model').current, 'astra');
+			} finally {
+				reopened.dispose();
 			}
 		}
 

@@ -53,6 +53,10 @@ export function chatHtml(web: vscode.Webview, media: vscode.Uri, scripts: vscode
 	<div id="agent-drop" hidden><span>Drop to add to agent</span></div>
 	<footer hidden>
 		<input id="image-picker" type="file" accept="image/png,image/jpeg,image/webp,image/gif" multiple hidden>
+		<details id="resume-warning" hidden>
+			<summary>Session model changed</summary>
+			<div id="resume-warning-detail"></div>
+		</details>
 		<div id="status" role="status"></div>
 		<section id="setup" aria-labelledby="setup-title" hidden>
 			<div role="status"><strong id="setup-title"></strong><p id="setup-text"></p></div>

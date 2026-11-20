@@ -29,6 +29,7 @@ let busy = false;
 let loaded = false;
 type ChatOption = import('../sessionOptions').SessionOption;
 interface SessionMetadata {
+	recordedModel?: string;
 	options: ChatOption[];
 	commands?: { name: string; description?: string }[];
 	usage?: { used: number; size: number };
@@ -81,7 +82,12 @@ function updateMetadata(data: SessionMetadata) {
 	if (commandsChanged && !suggestions.hidden && input.textContent.startsWith('/')) { suggest(); }
 	const { options, usage, workspace, connected, configuring } = data;
 	const model = options.find(option => option.kind === 'model');
-	const modelLabel = model?.choices.find(choice => choice.value === model.current)?.name ?? 'Model';
+	const modelLabel = model?.choices.find(choice => choice.value === model.current)?.name ?? (typeof model?.current === 'string' ? model.current : 'Model');
+	const warning = element<HTMLDetailsElement>('resume-warning');
+	const mismatch = data.recordedModel && model && model.current !== data.recordedModel && connected && !configuring;
+	warning.hidden = !mismatch;
+	if (!mismatch) { warning.open = false; }
+	element('resume-warning-detail').textContent = mismatch ? `This session used ${data.recordedModel}. Current model: ${modelLabel}.` : '';
 	element('model-name').textContent = modelLabel;
 	modelButton.title = modelLabel + ' · Model settings';
 	// Usage notifications should preserve menu focus.
