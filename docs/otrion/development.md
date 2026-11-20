@@ -25,7 +25,7 @@ On the first desktop launch, Otrion starts in Otrion Dark and opens a theme guid
 
 ## Release packages
 
-Run `bash scripts/otrion/package-release.sh` after installing dependencies on the target OS and CPU. The script writes native packages to `dist/v0.1.0/`. Windows produces a per-user installer, macOS a ZIP with an ad hoc signed application, and Linux a tar archive and a separate SSH server archive. The Otrion release workflow builds each target on x64 and ARM64. Download its artifacts and extract the outer Actions ZIP before attaching the eight files to the `v0.1.0` GitHub release. Use the exact build commit as the tag target. The release version is tracked separately from the VS Code extension API version.
+Run `bash scripts/otrion/package-release.sh` after installing dependencies on the target OS and CPU. The script writes native packages to `dist/v0.1.0/`. Windows produces a per-user installer, macOS a ZIP with an ad hoc signed application, and Linux a tar archive. Every target also produces a Remote SSH server archive named `otrion-reh-<os>-<arch>.tar.gz`. The release workflow builds `win32`, `darwin`, and `linux` packages for both `x64` and `arm64`. Download its artifacts and extract the outer Actions ZIP before attaching the twelve files to the `v0.1.0` GitHub release. Use the exact build commit as the tag target. The release version is tracked separately from the VS Code extension API version.
 
 ## Remote SSH
 

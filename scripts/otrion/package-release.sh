@@ -39,10 +39,18 @@ case "$platform" in
   linux)
     verify_product "$app/resources/app/product.json"
     tar -czf "$out/Otrion-$version-linux-$arch.tar.gz" --transform="s,^VSCode-linux-$arch,Otrion," -C .. "VSCode-linux-$arch"
-    pnpm run gulp "vscode-reh-linux-$arch-min"
-    server="vscode-reh-linux-$arch"
-    verify_product "../$server/product.json"
-    test -x "../$server/bin/otrion-server"
-    tar -czf "$out/otrion-reh-linux-$arch.tar.gz" -C .. "$server"
     ;;
 esac
+
+server="vscode-reh-$platform-$arch"
+pnpm run gulp "${server}-min"
+verify_product "../$server/product.json"
+if [[ "$platform" == win32 ]]; then
+  test -f "../$server/bin/otrion-server.cmd"
+  runtime="../$server/node.exe"
+else
+  test -x "../$server/bin/otrion-server"
+  runtime="../$server/node"
+fi
+test "$("$runtime" -p 'process.platform + "-" + process.arch')" = "$platform-$arch"
+tar -czf "$out/otrion-reh-$platform-$arch.tar.gz" -C .. "$server"

@@ -10,7 +10,7 @@ import { ILogger } from '../common/logger';
 import { AUTH_CONFIRMED_RE, CommandRunner, LineParser } from './nativeSshParser';
 import { isWindows, platform, RemotePlatform } from '../common/platform';
 import { NativeSshServerClient, NativeSshKeepalive } from './nativeSshServerClient';
-import { Architecture, buildServerInstallOptions, generateBashInstallScript, generatePowerShellInstallScript, LocalDownloadRequest, parseKernelName, parseLocalDownloadMarker, parseMachineArch, parseServerInstallOutput, Platform, resolveServerDownloadUrl, ServerInstallError, ServerInstallOptions, ServerInstallResult } from '../serverSetup';
+import { Architecture, buildServerInstallOptions, generateBashInstallScript, generatePowerShellInstallScript, LocalDownloadRequest, parseKernelName, parseLocalDownloadMarker, parseMachineArch, windowsArchCommand, parseServerInstallOutput, Platform, resolveServerDownloadUrl, ServerInstallError, ServerInstallOptions, ServerInstallResult } from '../serverSetup';
 import { ServerVersion } from '../server-config/types';
 import { computeScpArgs, computeSshArgs, getNativeSshSocketPath } from './nativeSshConnection';
 import SSHDestination from '../ssh/sshDestination';
@@ -259,7 +259,8 @@ export class NativeSshManager {
 
         let detectedArch: Architecture;
         if (detectedPlatform === 'windows') {
-            detectedArch = 'x64';
+            const arch = await this.runCommand(windowsArchCommand, stdout => stdout?.trim() || undefined, { timeout: 10_000 });
+            detectedArch = parseMachineArch(arch);
         } else {
             const result = await this.runCommand('echo "==$(uname -m)=="', (stdout, stderr) => {
                 if (stderr) {

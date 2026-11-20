@@ -22,7 +22,7 @@ $SERVER_SCRIPT="$SERVER_DIR\bin\$SERVER_APP_NAME.cmd"
 $SERVER_LOGFILE="$SERVER_DATA_DIR\.$DISTRO_COMMIT.log"
 $SERVER_PIDFILE="$SERVER_DATA_DIR\.$DISTRO_COMMIT.pid"
 $SERVER_TOKENFILE="$SERVER_DATA_DIR\.$DISTRO_COMMIT.token"
-$SERVER_ARCH=""
+$SERVER_ARCH="%%SERVER_ARCH%%"
 $SERVER_CONNECTION_TOKEN=""
 $SERVER_DOWNLOAD_URL="%%SERVER_DOWNLOAD_URL%%"
 $SERVER_VALIDATION_FLAG="%%SERVER_VALIDATION_FLAG%%"
@@ -33,7 +33,7 @@ $DOWNLOAD_REQUEST_SENT=$False
 
 $LISTENING_ON=""
 $OS_RELEASE_ID=""
-$ARCH=""
+$ARCH=$SERVER_ARCH
 $PLATFORM="win32"
 
 # Get commit from installed server's product.json
@@ -129,16 +129,6 @@ function Test-InstalledCommit() {
   $installed = Get-InstalledCommit
 
   return (!$installed -or $installed -eq $DISTRO_COMMIT)
-}
-
-# Check machine architecture
-$ARCH=$env:PROCESSOR_ARCHITECTURE
-# Use x64 version for ARM64, as it's not yet available.
-if(($ARCH -eq "AMD64") -or ($ARCH -eq "IA64") -or ($ARCH -eq "ARM64")) {
-  $SERVER_ARCH="x64"
-}
-else {
-  FailAndExit "Error architecture not supported: $ARCH"
 }
 
 # Validate the commit of the installed server against the expected one (DISTRO_COMMIT)
