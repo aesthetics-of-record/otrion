@@ -33,7 +33,7 @@ function parseHostKeyPrompt(prompt: string): PromptKind | null {
     return null;
 }
 
-export const AUTH_CONFIRMED_RE = /(?:debug\d+:\s*)?(?:Authentication succeeded|Authenticated to .* using ")/i;
+export const AUTH_CONFIRMED_RE = /(?:debug\d+:\s*)?(?:Authentication succeeded|Authenticated to .* using "|mux_client_request_session: master session id: \d+)/i;
 
 export function parsePrompt(prompt: string): ParsedPrompt {
     const kind = parseHostKeyPrompt(prompt);

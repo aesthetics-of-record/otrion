@@ -277,7 +277,7 @@ function packageTask(type: string, platform: string, arch: string, sourceFolderN
 			}
 		};
 		// Open Remote - SSH resolves connections on the desktop, including when connecting to a remote server.
-		const localWorkspaceExtensions = glob.sync('extensions/*/package.json', { ignore: 'extensions/open-remote-ssh/package.json' })
+		const localWorkspaceExtensions = glob.sync('extensions/*/package.json', { ignore: 'extensions/otrion-remote-ssh/package.json' })
 			.filter((extensionPath) => {
 				if (type === 'reh-web') {
 					return true; // web: ship all extensions for now

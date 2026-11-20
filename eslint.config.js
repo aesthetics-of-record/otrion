@@ -119,7 +119,7 @@ export default [
 		},
 	},
 	{
-		files: ['extensions/otrion-*/**/*.ts', 'extensions/open-remote-ssh/esbuild.mts'],
+		files: ['extensions/otrion-*/**/*.ts', 'extensions/otrion-remote-ssh/esbuild.mts'],
 		rules: {
 			'header/header': [2, 'block', [' Copyright (c) Otrion contributors. Licensed under the MIT License. ']],
 		},

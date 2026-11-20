@@ -1,24 +1,24 @@
 {
-	"name": "open-remote-ssh",
-	"displayName": "Open Remote - SSH",
-	"description": "Use any remote machine with a SSH server as your development environment.",
+	"name": "otrion-remote-ssh",
+	"displayName": "Otrion Remote SSH",
+	"description": "Open remote folders in Otrion over SSH.",
 	"version": "0.6.2",
 	"license": "MIT",
-	"publisher": "jeanp413",
+	"publisher": "otrion",
 	"repository": {
 		"type": "git",
-		"url": "https://github.com/jeanp413/open-remote-ssh.git"
+		"url": "https://github.com/aesthetics-of-record/otrion.git"
 	},
 	"bugs": {
-		"url": "https://github.com/jeanp413/open-remote-ssh/issues"
+		"url": "https://github.com/aesthetics-of-record/otrion/issues"
 	},
 	"engines": {
 		"vscode": "^1.70.2"
 	},
 	"main": "./out/extension.js",
 	"scripts": {
-		"compile": "gulp compile-extension:open-remote-ssh",
-		"watch": "gulp watch-extension:open-remote-ssh"
+		"compile": "gulp compile-extension:otrion-remote-ssh",
+		"watch": "gulp watch-extension:otrion-remote-ssh"
 	},
 	"dependencies": {
 		"@zokugun/is-it-type": "0.8.1",
@@ -36,30 +36,30 @@
 		"@types/ssh2-streams": "0.1.13"
 	},
 	"activationEvents": [
-		"onCommand:openremotessh.openEmptyWindow",
-		"onCommand:openremotessh.openEmptyWindowInCurrentWindow",
-		"onCommand:openremotessh.openConfigFile",
-		"onCommand:openremotessh.showLog",
+		"onCommand:otrion.ssh.openEmptyWindow",
+		"onCommand:otrion.ssh.openEmptyWindowInCurrentWindow",
+		"onCommand:otrion.ssh.openConfigFile",
+		"onCommand:otrion.ssh.showLog",
 		"onResolveRemoteAuthority:ssh-remote",
-		"onView:sshHosts"
+		"onView:otrion.ssh.hosts"
 	],
 	"contributes": {
 		"configuration": {
-			"title": "Remote - SSH",
+			"title": "Otrion Remote SSH",
 			"properties": {
-				"remote.SSH.path": {
+				"otrion.ssh.path": {
 					"type": "string",
 					"description": "An absolute path to the SSH executable. When empty, it will use \"ssh\" on the path or in common install locations.",
 					"default": "",
 					"scope": "application"
 				},
-				"remote.SSH.configFile": {
+				"otrion.ssh.configFile": {
 					"type": "string",
 					"description": "The absolute file path to a custom SSH config file.",
 					"default": "",
 					"scope": "application"
 				},
-				"remote.SSH.connectionBackend": {
+				"otrion.ssh.connectionBackend": {
 					"type": "string",
 					"description": "Select the backend used for SSH connections. The native backend is additive and intentionally left opt-in.",
 					"default": "ssh2",
@@ -73,14 +73,14 @@
 						"Use the native OpenSSH binary."
 					]
 				},
-				"remote.SSH.connectTimeout": {
+				"otrion.ssh.connectTimeout": {
 					"type": "number",
 					"description": "Specifies the timeout in seconds used for the SSH command that connects to the remote.",
 					"default": 60,
 					"scope": "application",
 					"minimum": 1
 				},
-				"remote.SSH.verifyUnknownHosts": {
+				"otrion.ssh.verifyUnknownHosts": {
 					"type": "string",
 					"enum": [
 						"accept",
@@ -96,7 +96,7 @@
 					"default": "ask",
 					"scope": "application"
 				},
-				"remote.SSH.verifyKnownHosts": {
+				"otrion.ssh.verifyKnownHosts": {
 					"type": "string",
 					"enum": [
 						"accept",
@@ -112,7 +112,7 @@
 					"default": "reject",
 					"scope": "application"
 				},
-				"remote.SSH.defaultExtensions": {
+				"otrion.ssh.defaultExtensions": {
 					"type": "array",
 					"items": {
 						"type": "string"
@@ -120,24 +120,24 @@
 					"description": "List of extensions that should be installed automatically on all SSH hosts.",
 					"scope": "application"
 				},
-				"remote.SSH.enableDynamicForwarding": {
+				"otrion.ssh.enableDynamicForwarding": {
 					"type": "boolean",
 					"description": "Whether to use SSH dynamic forwarding to allow setting up new port tunnels over an existing SSH connection.",
 					"scope": "application",
 					"default": true
 				},
-				"remote.SSH.enableAgentForwarding": {
+				"otrion.ssh.enableAgentForwarding": {
 					"type": "boolean",
-					"markdownDescription": "Enable fixing the remote environment so that the SSH config option `ForwardAgent` will take effect as expected from VS Code's remote extension host.",
+					"markdownDescription": "Enable fixing the remote environment so that the SSH config option `ForwardAgent` will take effect as expected from Otrion's remote extension host.",
 					"scope": "application",
 					"default": true
 				},
-				"remote.SSH.serverDownloadUrlTemplate": {
+				"otrion.ssh.serverDownloadUrlTemplate": {
 					"type": "string",
-					"description": "The URL from where the vscode server will be downloaded. You can use the following variables and they will be replaced dynamically:\n- ${quality}: vscode server quality, e.g. stable or insiders\n- ${version}: vscode server version, e.g. 1.69.0\n- ${commit}: vscode server release commit\n- ${arch}: vscode server arch, e.g. x64, armhf, arm64\n- ${release}: release number, vscodium only https://github.com/VSCodium/vscodium/pull/1192",
+					"description": "The URL from where the Otrion server will be downloaded. You can use the following variables and they will be replaced dynamically:\n- ${quality}: server quality, e.g. stable or insiders\n- ${version}: server version, e.g. 1.69.0\n- ${commit}: server release commit\n- ${arch}: server architecture, e.g. x64, armhf, arm64\n- ${release}: release number, vscodium only https://github.com/VSCodium/vscodium/pull/1192",
 					"scope": "application"
 				},
-				"remote.SSH.remotePlatform": {
+				"otrion.ssh.remotePlatform": {
 					"type": "object",
 					"description": "A map of the remote hostname to the platform for that remote. Valid values: linux, macos, windows.",
 					"scope": "application",
@@ -151,33 +151,33 @@
 						]
 					}
 				},
-				"remote.SSH.remoteServerListenOnSocket": {
+				"otrion.ssh.remoteServerListenOnSocket": {
 					"type": "boolean",
-					"description": "When true, the remote vscode server will listen on a socket path instead of opening a port. Only valid for Linux and macOS remotes. Requires `AllowStreamLocalForwarding` to be enabled for the SSH server.",
+					"description": "When true, the remote Otrion server will listen on a socket path instead of opening a port. Only valid for Linux and macOS remotes. Requires `AllowStreamLocalForwarding` to be enabled for the SSH server.",
 					"default": false
 				},
-				"remote.SSH.serverInstallPath": {
+				"otrion.ssh.serverInstallPath": {
 					"type": "object",
-					"description": "Specifies custom installation directories for the VS Code server on remote hosts. Maps each remote hostname (or pattern) to an absolute path where the server should be installed. Supports wildcards: use `*` for catch-all, or `*.domain.com` for domain-specific paths. More specific patterns take precedence over general ones. When not specified, the server installs in the default home directory. **Note**: Changing this setting may require manual cleanup of existing server installations in previous locations.",
+					"description": "Specifies custom installation directories for the Otrion server on remote hosts. Maps each remote hostname (or pattern) to an absolute path where the server should be installed. Supports wildcards: use `*` for catch-all, or `*.domain.com` for domain-specific paths. More specific patterns take precedence over general ones. When not specified, the server installs in the default home directory. **Note**: Changing this setting may require manual cleanup of existing server installations in previous locations.",
 					"scope": "application",
 					"default": {},
 					"additionalProperties": {
 						"type": "string"
 					}
 				},
-				"remote.SSH.serverBinaryName": {
+				"otrion.ssh.serverBinaryName": {
 					"type": "string",
 					"description": "The name of the server binary, use this **only if** you are using a client without a corresponding server release",
 					"scope": "application",
 					"default": ""
 				},
-				"remote.SSH.serverVersion": {
+				"otrion.ssh.serverVersion": {
 					"type": "string",
 					"description": "The version number of the remote VSCodium server. Can take the values: 'match' (default), 'latest', 'closest' or a specific version (e.g. '1.117.0').",
 					"scope": "application",
 					"default": "match"
 				},
-				"remote.SSH.serverValidation": {
+				"otrion.ssh.serverValidation": {
 					"type": "string",
 					"description": "Type of server validation: 'strict' (default) enforces that the remote and local server are the same version by matching the commit, 'force' modifies the remote commit to match the local server, 'skip' skips validation all together.",
 					"scope": "application",
@@ -193,9 +193,9 @@
 						"The remote server and client's commits must match. (default)"
 					]
 				},
-				"remote.SSH.localServerDownload": {
+				"otrion.ssh.localServerDownload": {
 					"type": "string",
-					"description": "Whether the extension can download the VS Code Server on the client and transfer it to the host with scp, instead of downloading it on the host.\n- auto: The server will first be downloaded on the host, and if that fails, will fall back to downloading locally\n- always: The server will only be downloaded locally and transferred to the host\n- off: The server will only be downloaded on the host",
+					"description": "Whether the extension can download the Otrion server on the client and transfer it to the host with scp, instead of downloading it on the host.\n- auto: The server will first be downloaded on the host, and if that fails, will fall back to downloading locally\n- always: The server will only be downloaded locally and transferred to the host\n- off: The server will only be downloaded on the host",
 					"scope": "application",
 					"default": "autor",
 					"enum": [
@@ -214,8 +214,8 @@
 		"views": {
 			"remote": [
 				{
-					"id": "sshHosts",
-					"name": "SSH Targets",
+					"id": "otrion.ssh.hosts",
+					"name": "SSH (Otrion)",
 					"group": "targets@1",
 					"remoteName": "ssh-remote"
 				}
@@ -223,62 +223,62 @@
 		},
 		"commands": [
 			{
-				"command": "openremotessh.openEmptyWindow",
+				"command": "otrion.ssh.openEmptyWindow",
 				"title": "Connect to Host...",
-				"category": "Remote-SSH"
+				"category": "Otrion Remote SSH"
 			},
 			{
-				"command": "openremotessh.openEmptyWindowInCurrentWindow",
+				"command": "otrion.ssh.openEmptyWindowInCurrentWindow",
 				"title": "Connect Current Window to Host...",
-				"category": "Remote-SSH"
+				"category": "Otrion Remote SSH"
 			},
 			{
-				"command": "openremotessh.openConfigFile",
+				"command": "otrion.ssh.openConfigFile",
 				"title": "Open SSH Configuration File...",
-				"category": "Remote-SSH"
+				"category": "Otrion Remote SSH"
 			},
 			{
-				"command": "openremotessh.showLog",
+				"command": "otrion.ssh.showLog",
 				"title": "Show Log",
-				"category": "Remote-SSH"
+				"category": "Otrion Remote SSH"
 			},
 			{
-				"command": "openremotessh.explorer.emptyWindowInNewWindow",
+				"command": "otrion.ssh.explorer.emptyWindowInNewWindow",
 				"title": "Connect to Host in New Window",
 				"icon": "$(empty-window)"
 			},
 			{
-				"command": "openremotessh.explorer.emptyWindowInCurrentWindow",
+				"command": "otrion.ssh.explorer.emptyWindowInCurrentWindow",
 				"title": "Connect to Host in Current Window",
 				"icon": "$(arrow-right)"
 			},
 			{
-				"command": "openremotessh.explorer.reopenFolderInCurrentWindow",
+				"command": "otrion.ssh.explorer.reopenFolderInCurrentWindow",
 				"title": "Open on SSH Host in Current Window",
 				"icon": "$(arrow-right)"
 			},
 			{
-				"command": "openremotessh.explorer.reopenFolderInNewWindow",
+				"command": "otrion.ssh.explorer.reopenFolderInNewWindow",
 				"title": "Open on SSH Host in New Window",
 				"icon": "$(folder-opened)"
 			},
 			{
-				"command": "openremotessh.explorer.deleteFolderHistoryItem",
+				"command": "otrion.ssh.explorer.deleteFolderHistoryItem",
 				"title": "Remove From Recent List",
 				"icon": "$(x)"
 			},
 			{
-				"command": "openremotessh.explorer.refresh",
+				"command": "otrion.ssh.explorer.refresh",
 				"title": "Refresh",
 				"icon": "$(refresh)"
 			},
 			{
-				"command": "openremotessh.explorer.configure",
+				"command": "otrion.ssh.explorer.configure",
 				"title": "Configure",
 				"icon": "$(gear)"
 			},
 			{
-				"command": "openremotessh.explorer.add",
+				"command": "otrion.ssh.explorer.add",
 				"title": "Add New",
 				"icon": "$(plus)"
 			}
@@ -298,156 +298,156 @@
 		"menus": {
 			"statusBar/remoteIndicator": [
 				{
-					"command": "openremotessh.openEmptyWindow",
+					"command": "otrion.ssh.openEmptyWindow",
 					"when": "remoteName =~ /^ssh-remote$/ && remoteConnectionState == connected",
 					"group": "remote_20_ssh_1general@1"
 				},
 				{
-					"command": "openremotessh.openEmptyWindowInCurrentWindow",
+					"command": "otrion.ssh.openEmptyWindowInCurrentWindow",
 					"when": "remoteName =~ /^ssh-remote$/ && remoteConnectionState == connected",
 					"group": "remote_20_ssh_1general@2"
 				},
 				{
-					"command": "openremotessh.openConfigFile",
+					"command": "otrion.ssh.openConfigFile",
 					"when": "remoteName =~ /^ssh-remote$/ && remoteConnectionState == connected",
 					"group": "remote_20_ssh_1general@3"
 				},
 				{
-					"command": "openremotessh.showLog",
+					"command": "otrion.ssh.showLog",
 					"when": "remoteName =~ /^ssh-remote$/ && remoteConnectionState == connected",
 					"group": "remote_20_ssh_1general@4"
 				},
 				{
-					"command": "openremotessh.openEmptyWindow",
+					"command": "otrion.ssh.openEmptyWindow",
 					"when": "remoteConnectionState == disconnected",
 					"group": "remote_20_ssh_3local@1"
 				},
 				{
-					"command": "openremotessh.openEmptyWindowInCurrentWindow",
+					"command": "otrion.ssh.openEmptyWindowInCurrentWindow",
 					"when": "remoteConnectionState == disconnected",
 					"group": "remote_20_ssh_3local@2"
 				},
 				{
-					"command": "openremotessh.openConfigFile",
+					"command": "otrion.ssh.openConfigFile",
 					"when": "remoteConnectionState == disconnected",
 					"group": "remote_20_ssh_3local@3"
 				},
 				{
-					"command": "openremotessh.openEmptyWindow",
+					"command": "otrion.ssh.openEmptyWindow",
 					"when": "!remoteName && !virtualWorkspace",
 					"group": "remote_20_ssh_3local@5"
 				},
 				{
-					"command": "openremotessh.openEmptyWindowInCurrentWindow",
+					"command": "otrion.ssh.openEmptyWindowInCurrentWindow",
 					"when": "!remoteName && !virtualWorkspace",
 					"group": "remote_20_ssh_3local@6"
 				},
 				{
-					"command": "openremotessh.openConfigFile",
+					"command": "otrion.ssh.openConfigFile",
 					"when": "!remoteName && !virtualWorkspace",
 					"group": "remote_20_ssh_3local@7"
 				}
 			],
 			"commandPalette": [
 				{
-					"command": "openremotessh.explorer.refresh",
+					"command": "otrion.ssh.explorer.refresh",
 					"when": "false"
 				},
 				{
-					"command": "openremotessh.explorer.configure",
+					"command": "otrion.ssh.explorer.configure",
 					"when": "false"
 				},
 				{
-					"command": "openremotessh.explorer.add",
+					"command": "otrion.ssh.explorer.add",
 					"when": "false"
 				},
 				{
-					"command": "openremotessh.explorer.emptyWindowInNewWindow",
+					"command": "otrion.ssh.explorer.emptyWindowInNewWindow",
 					"when": "false"
 				},
 				{
-					"command": "openremotessh.explorer.emptyWindowInCurrentWindow",
+					"command": "otrion.ssh.explorer.emptyWindowInCurrentWindow",
 					"when": "false"
 				},
 				{
-					"command": "openremotessh.explorer.reopenFolderInCurrentWindow",
+					"command": "otrion.ssh.explorer.reopenFolderInCurrentWindow",
 					"when": "false"
 				},
 				{
-					"command": "openremotessh.explorer.reopenFolderInNewWindow",
+					"command": "otrion.ssh.explorer.reopenFolderInNewWindow",
 					"when": "false"
 				},
 				{
-					"command": "openremotessh.explorer.deleteFolderHistoryItem",
+					"command": "otrion.ssh.explorer.deleteFolderHistoryItem",
 					"when": "false"
 				}
 			],
 			"view/title": [
 				{
-					"command": "openremotessh.explorer.add",
-					"when": "view == sshHosts",
+					"command": "otrion.ssh.explorer.add",
+					"when": "view == otrion.ssh.hosts",
 					"group": "navigation"
 				},
 				{
-					"command": "openremotessh.explorer.configure",
-					"when": "view == sshHosts",
+					"command": "otrion.ssh.explorer.configure",
+					"when": "view == otrion.ssh.hosts",
 					"group": "navigation"
 				},
 				{
-					"command": "openremotessh.explorer.refresh",
-					"when": "view == sshHosts",
+					"command": "otrion.ssh.explorer.refresh",
+					"when": "view == otrion.ssh.hosts",
 					"group": "navigation"
 				}
 			],
 			"view/item/context": [
 				{
-					"command": "openremotessh.explorer.emptyWindowInCurrentWindow",
-					"when": "viewItem =~ /^openremotessh.explorer.host$/",
+					"command": "otrion.ssh.explorer.emptyWindowInCurrentWindow",
+					"when": "viewItem =~ /^otrion.ssh.explorer.host$/",
 					"group": "inline@1"
 				},
 				{
-					"command": "openremotessh.explorer.emptyWindowInNewWindow",
-					"when": "viewItem =~ /^openremotessh.explorer.host$/",
+					"command": "otrion.ssh.explorer.emptyWindowInNewWindow",
+					"when": "viewItem =~ /^otrion.ssh.explorer.host$/",
 					"group": "inline@1"
 				},
 				{
-					"command": "openremotessh.explorer.emptyWindowInNewWindow",
-					"when": "viewItem =~ /^openremotessh.explorer.host$/",
+					"command": "otrion.ssh.explorer.emptyWindowInNewWindow",
+					"when": "viewItem =~ /^otrion.ssh.explorer.host$/",
 					"group": "navigation@2"
 				},
 				{
-					"command": "openremotessh.explorer.emptyWindowInCurrentWindow",
-					"when": "viewItem =~ /^openremotessh.explorer.host$/",
+					"command": "otrion.ssh.explorer.emptyWindowInCurrentWindow",
+					"when": "viewItem =~ /^otrion.ssh.explorer.host$/",
 					"group": "navigation@1"
 				},
 				{
-					"command": "openremotessh.explorer.reopenFolderInCurrentWindow",
-					"when": "viewItem == openremotessh.explorer.folder",
+					"command": "otrion.ssh.explorer.reopenFolderInCurrentWindow",
+					"when": "viewItem == otrion.ssh.explorer.folder",
 					"group": "inline@1"
 				},
 				{
-					"command": "openremotessh.explorer.reopenFolderInNewWindow",
-					"when": "viewItem == openremotessh.explorer.folder",
+					"command": "otrion.ssh.explorer.reopenFolderInNewWindow",
+					"when": "viewItem == otrion.ssh.explorer.folder",
 					"group": "inline@1"
 				},
 				{
-					"command": "openremotessh.explorer.reopenFolderInNewWindow",
-					"when": "viewItem == openremotessh.explorer.folder",
+					"command": "otrion.ssh.explorer.reopenFolderInNewWindow",
+					"when": "viewItem == otrion.ssh.explorer.folder",
 					"group": "navigation@2"
 				},
 				{
-					"command": "openremotessh.explorer.reopenFolderInCurrentWindow",
-					"when": "viewItem == openremotessh.explorer.folder",
+					"command": "otrion.ssh.explorer.reopenFolderInCurrentWindow",
+					"when": "viewItem == otrion.ssh.explorer.folder",
 					"group": "navigation@1"
 				},
 				{
-					"command": "openremotessh.explorer.deleteFolderHistoryItem",
-					"when": "viewItem =~ /^openremotessh.explorer.folder/",
+					"command": "otrion.ssh.explorer.deleteFolderHistoryItem",
+					"when": "viewItem =~ /^otrion.ssh.explorer.folder/",
 					"group": "navigation@3"
 				},
 				{
-					"command": "openremotessh.explorer.deleteFolderHistoryItem",
-					"when": "viewItem =~ /^openremotessh.explorer.folder/",
+					"command": "otrion.ssh.explorer.deleteFolderHistoryItem",
+					"when": "viewItem =~ /^otrion.ssh.explorer.folder/",
 					"group": "inline@2"
 				}
 			]
@@ -455,8 +455,8 @@
 	},
 	"icon": "resources/icon.png",
 	"galleryBanner": {
-		"color": "#ffffff",
-		"theme": "light"
+		"color": "#101a1a",
+		"theme": "dark"
 	},
 	"categories": [
 		"Other"

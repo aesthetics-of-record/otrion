@@ -227,7 +227,7 @@ if(!(Test-Path $SERVER_SCRIPT)) {
     Remove-Item -Recurse -Force "$SERVER_DIR\*"
     FailAndExit @"
 Error: downloaded server commit $badCommit does not match $DISTRO_COMMIT
-Check that remote.SSH.serverDownloadUrlTemplate resolves to the server for this build; a `${commit} keyed URL cannot be ambiguous
+Check that otrion.ssh.serverDownloadUrlTemplate resolves to the server for this build; a `${commit} keyed URL cannot be ambiguous
 "@
   }
 }
