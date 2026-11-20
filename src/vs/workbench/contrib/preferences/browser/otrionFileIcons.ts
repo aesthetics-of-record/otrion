@@ -3,6 +3,7 @@
 import { getWindow } from '../../../../base/browser/dom.js';
 import { Disposable } from '../../../../base/common/lifecycle.js';
 import { URI } from '../../../../base/common/uri.js';
+import { Schemas } from '../../../../base/common/network.js';
 import { ILanguageService } from '../../../../editor/common/languages/language.js';
 import { IModelService } from '../../../../editor/common/services/model.js';
 import { getIconClasses } from '../../../../editor/common/services/getIconClasses.js';
@@ -30,10 +31,9 @@ class OtrionFileIcons extends Disposable {
 		};
 		this._register(themes.onDidFileIconThemeChange(refresh));
 		this._register(themes.onDidColorThemeChange(refresh));
-		this._register(CommandsRegistry.registerCommand('_otrion.chat.fileIcon', async (_, uri: string, folder: boolean) => {
+		this._register(CommandsRegistry.registerCommand('_otrion.chat.fileIcon', async (_, resource: URI, folder: boolean) => {
 			used = true;
-			const resource = URI.parse(uri);
-			if (resource.scheme !== 'file') { return; }
+			if (!URI.isUri(resource) || (resource.scheme !== Schemas.file && resource.scheme !== Schemas.vscodeRemote)) { return; }
 			const container = layout.activeContainer;
 			const doc = container.ownerDocument;
 			const probe = doc.createElement('div');
