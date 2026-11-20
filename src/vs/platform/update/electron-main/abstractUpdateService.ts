@@ -17,11 +17,12 @@ import { IEnvironmentMainService } from '../../environment/electron-main/environ
 import { ILifecycleMainService, LifecycleMainPhase } from '../../lifecycle/electron-main/lifecycleMainService.js';
 import { ILogService } from '../../log/common/log.js';
 import { IProductService } from '../../product/common/productService.js';
-import { IRequestService } from '../../request/common/request.js';
+import { asJson, IRequestService } from '../../request/common/request.js';
 import { StorageScope, StorageTarget } from '../../storage/common/storage.js';
 import { IApplicationStorageMainService } from '../../storage/electron-main/storageMainService.js';
 import { ITelemetryService } from '../../telemetry/common/telemetry.js';
 import { AvailableForDownload, DisablementReason, IQuitAndInstallOptions, IUpdate, IUpdateService, State, StateType, UpdateType } from '../common/update.js';
+import { getGitHubReleaseUrl, IGitHubRelease, selectGitHubReleaseUpdate } from './githubReleaseUpdate.js';
 
 const LAST_KNOWN_VERSION_STORAGE_KEY = 'abstractUpdateService/lastKnownVersion';
 
@@ -203,7 +204,7 @@ export abstract class AbstractUpdateService extends Disposable implements IUpdat
 			return;
 		}
 
-		if (!this.productService.updateUrl || !this.productService.commit) {
+		if ((!this.productService.updateUrl && !this.githubReleaseUrl) || !this.productService.commit) {
 			this.setDisabledPermanently(DisablementReason.MissingConfiguration);
 			this.logService.info('update#ctor - updates are disabled as there is no update URL');
 			return;
@@ -443,7 +444,27 @@ export abstract class AbstractUpdateService extends Disposable implements IUpdat
 	}
 
 	private getProductQuality(updateMode: string): string | undefined {
-		return updateMode === 'none' ? undefined : this.productService.quality;
+		return updateMode === 'none' ? undefined : this.productService.quality ?? (this.githubReleaseUrl ? 'stable' : undefined);
+	}
+
+	protected get githubReleaseUrl(): string | undefined {
+		return getGitHubReleaseUrl(this.productService.otrionUpdateRepository);
+	}
+
+	protected async fetchUpdate(url: string, callSite: string, token: CancellationToken, pendingVersion?: string): Promise<IUpdate | null> {
+		const repository = this.productService.otrionUpdateRepository;
+		if (!repository || url !== this.githubReleaseUrl) {
+			const headers = getUpdateRequestHeaders(this.productService.version);
+			return asJson<IUpdate>(await this.requestService.request({ url, headers, callSite }, token));
+		}
+
+		const headers = { 'Accept': 'application/vnd.github+json', 'User-Agent': `Otrion/${this.productService.otrionVersion}` };
+		const context = await this.requestService.request({ url, headers, timeout: 10000, callSite }, token);
+		if (context.res.statusCode === 404) {
+			return null;
+		}
+		const release = await asJson<IGitHubRelease>(context);
+		return selectGitHubReleaseUpdate(repository, pendingVersion ?? this.productService.otrionVersion ?? '', process.platform, process.arch, release);
 	}
 
 	private scheduleCheckForUpdates(delay = 60 * 60 * 1000, repeat = true): void {
@@ -662,7 +683,7 @@ export abstract class AbstractUpdateService extends Disposable implements IUpdat
 			return undefined;
 		}
 
-		const url = this.buildUpdateFeedUrl(this.quality, commit ?? this.productService.commit!, { internalOrg: this.getInternalOrg() });
+		const url = this.githubReleaseUrl ?? this.buildUpdateFeedUrl(this.quality, commit ?? this.productService.commit!, { internalOrg: this.getInternalOrg() });
 
 		if (!url) {
 			return undefined;
@@ -672,6 +693,9 @@ export abstract class AbstractUpdateService extends Disposable implements IUpdat
 		this.logService.trace('update#isLatestVersion() - checking update server', { url, headers });
 
 		try {
+			if (url === this.githubReleaseUrl) {
+				return !await this.fetchUpdate(url, 'updateService.isLatestVersion', token, commit);
+			}
 			const context = await this.requestService.request({ url, headers, callSite: 'updateService.isLatestVersion' }, token);
 			const statusCode = context.res.statusCode;
 			this.logService.trace('update#isLatestVersion() - response', { statusCode });

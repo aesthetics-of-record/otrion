@@ -98,6 +98,8 @@ export interface IDictationRuntimeProductConfig {
 
 export interface IProductConfiguration {
 	readonly otrionVersion?: string;
+	readonly otrionUpdateRepository?: string;
+	readonly otrionMacSignedUpdates?: boolean;
 	readonly version: string;
 	readonly date?: string;
 	readonly quality?: string;

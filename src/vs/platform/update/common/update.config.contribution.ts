@@ -21,7 +21,7 @@ configurationRegistry.registerConfiguration({
 			enum: ['none', 'manual', 'start', 'default'],
 			default: 'default',
 			scope: ConfigurationScope.APPLICATION,
-			description: localize('updateMode', "Configure whether you receive automatic updates. The updates are fetched from a Microsoft online service."),
+			description: localize('updateMode', "Configure whether this application checks for updates automatically."),
 			tags: ['usesOnlineServices'],
 			enumDescriptions: [
 				localize('none', "Disable updates."),
@@ -34,7 +34,7 @@ configurationRegistry.registerConfiguration({
 				category: PolicyCategory.Update,
 				minimumVersion: '1.67',
 				localization: {
-					description: { key: 'updateMode', value: localize('updateMode', "Configure whether you receive automatic updates. The updates are fetched from a Microsoft online service."), },
+					description: { key: 'updateMode', value: localize('updateMode', "Configure whether this application checks for updates automatically."), },
 					enumDescriptions: [
 						{
 							key: 'none',
@@ -60,7 +60,7 @@ configurationRegistry.registerConfiguration({
 			type: 'string',
 			default: 'default',
 			scope: ConfigurationScope.APPLICATION,
-			description: localize('updateMode', "Configure whether you receive automatic updates. The updates are fetched from a Microsoft online service."),
+			description: localize('updateMode', "Configure whether this application checks for updates automatically."),
 			deprecationMessage: localize('deprecated', "This setting is deprecated, please use '{0}' instead.", 'update.mode')
 		},
 		'update.enableWindowsBackgroundUpdates': {
@@ -68,7 +68,7 @@ configurationRegistry.registerConfiguration({
 			default: true,
 			scope: ConfigurationScope.APPLICATION,
 			title: localize('enableWindowsBackgroundUpdatesTitle', "Enable Background Updates"),
-			description: localize('enableWindowsBackgroundUpdates', "Enable to download and install new VS Code versions in the background."),
+			description: localize('enableWindowsBackgroundUpdates', "Enable to download and install updates in the background."),
 			included: isWindows && !isWeb
 		},
 		'update.restartWhenIdle': {

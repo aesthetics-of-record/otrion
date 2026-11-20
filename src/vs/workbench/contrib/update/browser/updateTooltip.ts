@@ -139,7 +139,7 @@ export class UpdateTooltip extends Disposable {
 	}
 
 	private updateCurrentVersion() {
-		const productVersion = this.productService.version;
+		const productVersion = this.productService.otrionVersion ?? this.productService.version;
 		if (productVersion) {
 			const currentCommitId = this.productService.commit?.substring(0, 7);
 			this.currentVersionNode.textContent = currentCommitId

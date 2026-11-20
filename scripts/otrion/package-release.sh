@@ -39,7 +39,7 @@ case "$platform" in
     ;;
   linux)
     verify_product "$app/resources/app/product.json"
-    tar -czf "$out/Otrion-$version-linux-$arch.tar.gz" --transform="s,^VSCode-linux-$arch,Otrion," -C .. "VSCode-linux-$arch"
+    bash scripts/otrion/package-linux.sh "$app" "$version" "$out/Otrion-$version-linux-$arch.tar.gz"
     ;;
 esac
 

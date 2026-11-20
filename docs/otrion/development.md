@@ -29,6 +29,20 @@ Update the version in a PR and merge to `main` to start the automatic release. [
 
 For a local build, run `bash scripts/otrion/package-release.sh` after installing dependencies on the target OS and CPU. The script writes packages under `dist/v<version>/`. Each target produces a desktop package and a Remote SSH server archive named `otrion-reh-<os>-<arch>.tar.gz`. The release version is tracked separately from the VS Code extension API version.
 
+## Desktop updates
+
+Packaged Otrion builds with the updater check GitHub Releases for a newer stable Otrion version. Open **Check for Updates** from the settings menu or Command Palette. Use `update.mode` in Editor Settings to control automatic checks.
+
+| Installation | How updates are applied |
+| --- | --- |
+| Windows x64 user setup | Otrion verifies the installer and offers **Restart to Update**. Run the app as the installing user. |
+| macOS Intel and Apple Silicon | Developer ID builds use Electron’s native updater and offer **Restart to Update**. Install the signed app in Applications. Ad hoc builds open the matching release ZIP for manual replacement. |
+| Linux x64 and ARM64 | Extract the entire release archive into a writable directory and launch `Otrion/otrion`. Otrion verifies the SHA-256 digest and prepares the next version. **Restart to Update** switches the `current` link and reopens the app. Read-only, older flat, and administrator-managed sandbox installations open the release download. |
+
+Install the first updater-enabled release from GitHub. Source runs through `scripts/code.sh` use the same Otrion display name and a separate development profile. Test the update flow with packaged builds. [GitHub Releases](https://github.com/aesthetics-of-record/otrion/releases)
+
+On Linux, older payloads stay under `.otrion-versions/` so other running instances can finish using them. After closing all instances, you can remove unused versions. Keep the directory referenced by `current`. Portable user data lives in `Otrion/data/`.
+
 ## Remote SSH
 
 Otrion Desktop bundles Open Remote - SSH. In the Command Palette, run `Remote-SSH: Connect to Host...` and select an SSH host or enter `user@host`. The extension reads your SSH configuration. Edit the built-in extension under `extensions/open-remote-ssh/`. Run `pnpm run gulp compile-extension:open-remote-ssh` from the repository root and reload the development window to try a change. The desktop build bundles the extension from the same sources. [Source layout and upstream revision](../../extensions/open-remote-ssh/README.md)

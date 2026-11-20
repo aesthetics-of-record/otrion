@@ -30,11 +30,11 @@ import { ILogService } from '../../log/common/log.js';
 import { IMeteredConnectionService } from '../../meteredConnection/common/meteredConnection.js';
 import { INativeHostMainService } from '../../native/electron-main/nativeHostMainService.js';
 import { IProductService } from '../../product/common/productService.js';
-import { asJson, IRequestService } from '../../request/common/request.js';
+import { IRequestService } from '../../request/common/request.js';
 import { IApplicationStorageMainService } from '../../storage/electron-main/storageMainService.js';
 import { ITelemetryService } from '../../telemetry/common/telemetry.js';
 import { AvailableForDownload, DisablementReason, IUpdate, State, StateType, UpdateType } from '../common/update.js';
-import { AbstractUpdateService, createUpdateURL, getUpdateRequestHeaders, IUpdateURLOptions, UpdateErrorClassification } from './abstractUpdateService.js';
+import { AbstractUpdateService, createUpdateURL, IUpdateURLOptions, UpdateErrorClassification } from './abstractUpdateService.js';
 import { getRelaunchArguments } from './updateRelaunchArguments.js';
 import { getWin32UpdateType } from './win32UpdateType.js';
 
@@ -63,7 +63,8 @@ export class Win32UpdateService extends AbstractUpdateService implements IRelaun
 	private readonly setupMutexName: string;
 
 	private get cachePathSync(): string {
-		return path.join(tmpdir(), `vscode-${this.productService.quality}-${this.productService.target}-${process.arch}`);
+		const application = this.githubReleaseUrl ? this.productService.applicationName : 'vscode';
+		return path.join(tmpdir(), `${application}-${this.productService.quality}-${this.productService.target}-${process.arch}`);
 	}
 
 	@memoize
@@ -206,6 +207,9 @@ export class Win32UpdateService extends AbstractUpdateService implements IRelaun
 	}
 
 	protected buildUpdateFeedUrl(quality: string, commit: string, options?: IUpdateURLOptions): string | undefined {
+		if (this.githubReleaseUrl) {
+			return this.githubReleaseUrl;
+		}
 		let platform = `win32-${process.arch}`;
 
 		if (this.getUpdateType() === UpdateType.Archive) {
@@ -225,6 +229,9 @@ export class Win32UpdateService extends AbstractUpdateService implements IRelaun
 		const internalOrg = this.getInternalOrg();
 		const background = !explicit && !internalOrg;
 		const url = this.buildUpdateFeedUrl(this.quality, pendingCommit ?? this.productService.commit!, { background, internalOrg });
+		if (!url) {
+			return;
+		}
 
 		// Only set CheckingForUpdates if we're not already in Overwriting state
 		if (this.state.type !== StateType.Overwriting) {
@@ -236,9 +243,7 @@ export class Win32UpdateService extends AbstractUpdateService implements IRelaun
 		const cts = this.checkCancellationTokenSource = new CancellationTokenSource();
 		const token = cts.token;
 
-		const headers = getUpdateRequestHeaders(this.productService.version);
-		const promise = this.requestService.request({ url, headers, callSite: 'updateService.win32.checkForUpdates' }, token)
-			.then<IUpdate | null>(asJson)
+		const promise = this.fetchUpdate(url, 'updateService.win32.checkForUpdates', token, pendingCommit)
 			.then(update => {
 				const updateType = this.getUpdateType();
 
@@ -258,7 +263,7 @@ export class Win32UpdateService extends AbstractUpdateService implements IRelaun
 					return Promise.resolve(null);
 				}
 
-				if (updateType === UpdateType.Archive) {
+				if (updateType === UpdateType.Archive || (this.githubReleaseUrl && this.productService.target !== 'user')) {
 					this.setState(State.AvailableForDownload(update));
 					return Promise.resolve(null);
 				}
@@ -272,9 +277,17 @@ export class Win32UpdateService extends AbstractUpdateService implements IRelaun
 
 				return this.cleanup(update.version).then(() => {
 					return this.getUpdatePackagePath(update.version).then(updatePackagePath => {
-						return pfs.Promises.exists(updatePackagePath).then(exists => {
+						return pfs.Promises.exists(updatePackagePath).then(async exists => {
 							if (exists) {
-								return Promise.resolve(updatePackagePath);
+								if (!this.githubReleaseUrl || !update.sha256hash) {
+									return updatePackagePath;
+								}
+								try {
+									await checksum(updatePackagePath, update.sha256hash);
+									return updatePackagePath;
+								} catch {
+									await this.unlink(updatePackagePath);
+								}
 							}
 
 							if (this.deferAutomaticDownload(update, explicit)) {
@@ -368,6 +381,10 @@ export class Win32UpdateService extends AbstractUpdateService implements IRelaun
 	}
 
 	protected override async doDownloadUpdate(state: AvailableForDownload): Promise<void> {
+		if (this.githubReleaseUrl && this.productService.target === 'user') {
+			this.setState(State.Idle(this.getUpdateType()));
+			return this.checkForUpdates(true);
+		}
 		if (state.update.url) {
 			this.nativeHostMainService.openExternal(undefined, state.update.url);
 		}
