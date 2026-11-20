@@ -45,11 +45,11 @@ On Linux, older payloads stay under `.otrion-versions/` so other running instanc
 
 ## Remote SSH
 
-Otrion Desktop bundles Open Remote - SSH. In the Command Palette, run `Remote-SSH: Connect to Host...` and select an SSH host or enter `user@host`. The extension reads your SSH configuration. Edit the built-in extension under `extensions/open-remote-ssh/`. Run `pnpm run gulp compile-extension:open-remote-ssh` from the repository root and reload the development window to try a change. The desktop build bundles the extension from the same sources. [Source layout and upstream revision](../../extensions/open-remote-ssh/README.md)
+Otrion Desktop bundles Otrion Remote SSH. In the Command Palette, run `Otrion Remote SSH: Connect to Host...` and select an SSH host or enter `user@host`. The extension reads your SSH configuration. Edit the built-in extension under `extensions/otrion-remote-ssh/`. Run `pnpm run gulp compile-extension:otrion-remote-ssh` from the repository root and reload the development window to try a change. The desktop build bundles the extension from the same sources. [Source layout and upstream revision](../../extensions/otrion-remote-ssh/README.md)
 
 ### Remote server for a desktop release
 
-For first-time connections, publish an Otrion remote extension host archive for the target OS and architecture from the **same commit** as the packaged desktop client. The SSH extension reads that commit and the download URL template from the packaged client’s `product.json`. Source launches with `scripts/code.sh` can exercise the extension and host picker, but their root `product.json` has no packaged commit.
+For first-time connections, publish an Otrion remote extension host archive for the target OS and architecture from the **same commit** as the packaged desktop client. The SSH extension reads that commit and the download URL template from the packaged client’s `product.json`. Source launches use the local Git release tag matching `otrionVersion` to identify the published server.
 
 For example, on a Linux x64 build host, install the project dependencies and run these commands from the repository root:
 
@@ -58,7 +58,19 @@ pnpm run gulp vscode-reh-linux-x64-min
 tar -czf otrion-reh-linux-x64.tar.gz -C .. vscode-reh-linux-x64
 ```
 
-The release workflow attaches these archives to the matching GitHub Release. Keep the top-level directory in manually built archives because the installer strips it when extracting. For private builds, set `remote.SSH.serverDownloadUrlTemplate` in User Settings to your own artifact endpoint. The remote installation uses `~/.otrion-server`. Open Remote - SSH keeps its default strict commit validation.
+The release workflow attaches these archives to the matching GitHub Release. Keep the top-level directory in manually built archives because the installer strips it when extracting. For private builds, set `otrion.ssh.serverDownloadUrlTemplate` in User Settings to your own artifact endpoint. The remote installation uses `~/.otrion-server`. Otrion Remote SSH keeps its default strict commit validation.
+
+## Dev Containers
+
+Open a trusted project with a `.devcontainer/devcontainer.json` or `.devcontainer.json` file. Choose **Reopen in Container** in the notification, the remote status menu, or the Command Palette. You can start from a local folder or a folder already open through Otrion Remote SSH.
+
+In **Remote Explorer**, use the selector beside the title to switch between **SSH (Otrion)** and **Dev Containers (Otrion)**. The container view lists containers on the current Docker host, including stopped ones. Hover over a row to open it or start it, or right-click to open it in a new window. Otrion reuses a known project folder and asks which folder to open on first attach. Use the refresh button after changing containers outside the editor.
+
+Docker must be running on the machine that holds the project. For a Compose project, install the Docker Compose plugin on that machine as well. Windows Docker hosts must use Linux containers. The desktop includes the Dev Container CLI. On first connection, the Docker host downloads the matching Otrion server for the container architecture. Use a glibc-based Linux x64 or ARM64 image such as Debian or Ubuntu.
+
+The editor opens the mounted project. Terminals, workspace extensions, and Otrion Chat agents run in the container. Use **Otrion Settings → Agents** there to configure an agent for that environment. Use **Reopen on Host** to return to the original folder, **Rebuild and Reopen in Container** after changing the configuration, or **Attach to Running Container** to choose an existing container and folder.
+
+Edit the built-in integration in `extensions/otrion-dev-containers/`. Run `pnpm run gulp compile-extension:otrion-dev-containers compile-extension:otrion-remote-ssh` and reload the development window to try a change.
 
 ## Set up Codex and Claude Code
 

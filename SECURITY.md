@@ -1,14 +1,7 @@
-<!-- BEGIN MICROSOFT SECURITY.MD V1.0.0 BLOCK -->
+# Reporting a security issue
 
-## Security
+If you find a vulnerability in Otrion, please share the details privately with the maintainers. On the [Otrion Security page](https://github.com/aesthetics-of-record/otrion/security), select **Report a vulnerability** if available. If that option is unavailable, open an [Otrion issue](https://github.com/aesthetics-of-record/otrion/issues) asking for a private reporting channel. Keep vulnerability details out of the public issue.
 
-Microsoft takes the security of our software products and services seriously, which
-includes all source code repositories in our GitHub organizations.
+In your private report, include the affected Otrion version, platform, steps to reproduce, and potential impact. Remove credentials, API keys, and private workspace data from logs or screenshots.
 
-**Please do not report security vulnerabilities through public GitHub issues.**
-
-For security reporting information, locations, contact information, and policies,
-please review the latest guidance for Microsoft repositories at
-[https://aka.ms/SECURITY.md](https://aka.ms/SECURITY.md).
-
-<!-- END MICROSOFT SECURITY.MD BLOCK -->
+If you can also reproduce the issue in upstream Visual Studio Code, follow [Microsoft’s security reporting instructions](https://github.com/microsoft/vscode/security/policy) for the upstream report.
