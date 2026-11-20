@@ -4,6 +4,7 @@ import * as vscode from 'vscode';
 import { agents, AgentStore, allowed, isAgent, type AgentId } from './agents';
 
 export function registerSettings(context: vscode.ExtensionContext, store: AgentStore) {
+	const remote = !!vscode.env.remoteAuthority;
 	let panel: vscode.WebviewPanel | undefined;
 	const installing = new Set<AgentId>();
 	const changingAuth = new Set<AgentId>();
@@ -17,7 +18,8 @@ export function registerSettings(context: vscode.ExtensionContext, store: AgentS
 		const rows = await Promise.all((Object.keys(agents) as AgentId[]).map(async id => {
 			const [launch, installed] = await Promise.all([store.launch(id), store.isInstalled(id)]);
 			const setting = vscode.workspace.getConfiguration('otrion.chat').get<string>(id + 'AcpPath');
-			const missing = setting && setting !== agents[id].binary ? 'Check otrion.chat.' + id + 'AcpPath in Editor Settings.' : installed ? 'Install Node.js and restart Otrion.' : 'Not installed';
+			const missingRuntime = remote ? vscode.l10n.t('Install Node.js on the remote host and reconnect.') : 'Install Node.js and restart Otrion.';
+			const missing = setting && setting !== agents[id].binary ? 'Check otrion.chat.' + id + 'AcpPath in Editor Settings.' : installed ? missingRuntime : 'Not installed';
 			const choice = await store.authChoice(id);
 			const auth = choice.mode === 'cli' && launch && allowed(id) ? await store.authStatus(id, launch) : undefined;
 			return { id, auth, ...choice, installed, source: launch?.source, availability: launch?.source ?? missing, allowed: allowed(id), installing: installing.has(id), error: errors.get(id) };
@@ -127,6 +129,7 @@ export function registerSettings(context: vscode.ExtensionContext, store: AgentS
 			<div class="gallery-actions"><button class="primary" type="submit">Save</button><button type="button" id="reset">Restore Open VSX defaults</button>
 			<button type="button" id="reload" hidden>Reload Window</button></div><p id="gallery-status" role="status"></p></form>
 			<h2>Agents</h2>
+			${remote ? `<p class="agent-host">${vscode.l10n.t('Agents run on the connected host. Install, enable, and sign in for this host.')}</p>` : ''}
 			<div class="catalog"><input id="search" type="search" placeholder="Search agents…" aria-label="Search agents">
 			<div class="agents">${cards}</div><p id="empty" hidden>No matching agents.</p></div></main><script src="${web.asWebviewUri(vscode.Uri.joinPath(scripts, 'settings.js'))}"></script></body></html>`;
 	}), { dispose: () => panel?.dispose() });

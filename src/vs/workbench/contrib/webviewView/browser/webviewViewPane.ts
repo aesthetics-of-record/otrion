@@ -9,6 +9,7 @@ import { CodeDataTransfers, containsDragType, extractEditorsDropData } from '../
 import { CancellationTokenSource } from '../../../../base/common/cancellation.js';
 import { Emitter } from '../../../../base/common/event.js';
 import { DisposableStore, IDisposable, MutableDisposable, toDisposable } from '../../../../base/common/lifecycle.js';
+import { Schemas } from '../../../../base/common/network.js';
 import { MenuId } from '../../../../platform/actions/common/actions.js';
 import { IConfigurationService } from '../../../../platform/configuration/common/configuration.js';
 import { IContextKeyService } from '../../../../platform/contextkey/common/contextkey.js';
@@ -220,7 +221,8 @@ export class WebviewViewPane extends ViewPane {
 			this._webviewDisposables.add(addDisposableListener(target, EventType.DROP, e => {
 				setOver(false);
 				if (!accepts(e)) { return; }
-				const uris = extractEditorsDropData(e).flatMap(item => item.resource?.scheme === 'file' ? [item.resource.toString()] : []);
+				const uris = extractEditorsDropData(e).flatMap(({ resource }) =>
+					resource && (resource.scheme === Schemas.file || resource.scheme === Schemas.vscodeRemote) ? [resource.toString()] : []);
 				e.preventDefault();
 				e.stopPropagation();
 				webview.windowDidDragEnd();

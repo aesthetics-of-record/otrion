@@ -25,6 +25,8 @@ On the first desktop launch, Otrion starts in Otrion Dark and opens a theme guid
 
 ## Release packages
 
+To ship merged changes from `main`, follow the [release guide](release.md).
+
 Run `bash scripts/otrion/package-release.sh` after installing dependencies on the target OS and CPU. The script writes native packages to `dist/v0.1.0/`. Windows produces a per-user installer, macOS a ZIP with an ad hoc signed application, and Linux a tar archive. Every target also produces a Remote SSH server archive named `otrion-reh-<os>-<arch>.tar.gz`. The release workflow builds `win32`, `darwin`, and `linux` packages for both `x64` and `arm64`. Download its artifacts and extract the outer Actions ZIP before attaching the twelve files to the `v0.1.0` GitHub release. Use the exact build commit as the tag target. The release version is tracked separately from the VS Code extension API version.
 
 ## Remote SSH
@@ -50,7 +52,9 @@ Open **Otrion → Preferences → Otrion Settings** on macOS or **File → Prefe
 
 In **Agents**, choose **Install**, then **Enable**. An existing working adapter can be enabled immediately. Install requires Node.js 22 or newer and npm on your PATH. Otrion downloads a versioned ACP adapter with its agent runtime to the extension’s local storage. Both agents start with chat access turned off. Use **Sign in** beside **CLI account** to authenticate, or choose **Disable** in the **…** menu. The provider handles sign-in in a terminal and can reuse your existing CLI login. [OpenAI authentication](https://learn.chatgpt.com/docs/auth) · [Claude Code ACP adapter](https://github.com/agentclientprotocol/claude-agent-acp)
 
-Otrion also detects existing adapters on your PATH. To select a specific executable, set `otrion.chat.codexAcpPath` or `otrion.chat.claudeAcpPath` in User Settings. A custom path takes precedence over an Otrion-managed install. Restore the default setting to use the managed version. On Windows, use the native executable for a custom path.
+Otrion also detects existing adapters on your PATH. To select a specific executable, set `otrion.chat.codexAcpPath` or `otrion.chat.claudeAcpPath` in User Settings. A custom path takes precedence over an Otrion-managed install. Restore the default setting to use the managed version. On Windows, Otrion can launch a native executable, the standard npm adapter installation, or an absolute path to a Node.js entry point.
+
+In a Remote SSH window, Otrion runs agents on the connected Windows, macOS, or Linux host. Install Node.js 22 or newer and npm on that host, then open **Otrion Settings → Agents** in the SSH window to install and enable an adapter. Use the remote user settings for custom executable paths. Codex **Sign in** uses device-code authentication in SSH windows. [Codex authentication on headless hosts](https://learn.chatgpt.com/docs/auth#login-on-headless-devices)
 
 ## Chat in the right sidebar
 

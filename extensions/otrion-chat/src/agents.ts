@@ -29,8 +29,7 @@ async function fileExists(file: string, mode = constants.F_OK) {
 }
 
 async function executable(name: string) {
-	const candidates = path.isAbsolute(name) ? [name] : (process.env.PATH ?? '').split(path.delimiter)
-		.filter(dir => path.isAbsolute(dir))
+	const candidates = path.isAbsolute(name) ? [name] : pathDirectories()
 		.map(dir => path.join(dir, process.platform === 'win32' && !path.extname(name) ? name + '.exe' : name));
 	for (const file of candidates) {
 		if (await fileExists(file, constants.X_OK)) { return file; }
@@ -38,10 +37,62 @@ async function executable(name: string) {
 	return undefined;
 }
 
+function pathDirectories() {
+	return (process.env.PATH ?? '').split(path.delimiter)
+		.map(dir => process.platform === 'win32' ? dir.replace(/^"(.*)"$/, '$1') : dir)
+		.filter(dir => path.isAbsolute(dir));
+}
+
+interface Command {
+	command: string;
+	args: string[];
+}
+
+async function resolveCommand(name: string, npmPackage: string, entryPoint: string): Promise<Command | undefined> {
+	const extension = path.extname(name).toLowerCase();
+	if (process.platform !== 'win32' || !extension || extension === '.exe') {
+		const command = await executable(name);
+		if (command) { return { command, args: [] }; }
+	}
+	if (process.platform !== 'win32') { return undefined; }
+
+	const node = await executable('node');
+	if (!node) { return undefined; }
+	if (path.isAbsolute(name) && ['.js', '.cjs', '.mjs'].includes(extension) && await fileExists(name)) {
+		return { command: node, args: [name] };
+	}
+	if (!extension || extension === '.cmd') {
+		// npm's Windows launchers are shell scripts. Run the installed package entry directly.
+		const shim = await executable(extension ? name : name + '.cmd');
+		if (shim) {
+			const entry = path.join(path.dirname(shim), 'node_modules', npmPackage, entryPoint);
+			if (await fileExists(entry)) { return { command: node, args: [entry] }; }
+		}
+	}
+	return undefined;
+}
+
+async function npmCommand(node: string): Promise<Command | undefined> {
+	if (process.platform !== 'win32') {
+		const command = await executable('npm');
+		return command ? { command, args: [] } : undefined;
+	}
+	// The npm installation can be on a different PATH entry from node.exe.
+	for (const dir of new Set([path.dirname(node), ...pathDirectories()])) {
+		const cli = path.join(dir, 'node_modules', 'npm', 'bin', 'npm-cli.js');
+		if (await fileExists(cli)) { return { command: node, args: [cli] }; }
+	}
+	return undefined;
+}
+
 export class AgentStore {
 	constructor(private readonly root: string, private readonly secrets: vscode.SecretStorage) {}
 
-	private authKey(id: AgentId) { return 'agent-auth.' + id; }
+	private authKey(id: AgentId) {
+		// SecretStorage belongs to the client even when the adapter runs on a remote host.
+		const authority = vscode.env.remoteAuthority;
+		return authority ? 'agent-auth.remote.' + authority + '.' + id : 'agent-auth.' + id;
+	}
 
 	onAuthChange(listener: (id: AgentId) => void) {
 		return this.secrets.onDidChange(({ key }) => {
@@ -124,27 +175,27 @@ export class AgentStore {
 	async launch(id: AgentId) {
 		const agent = agents[id];
 		const setting = vscode.workspace.getConfiguration('otrion.chat').get<string>(id + 'AcpPath', agent.binary);
-		if (setting !== agent.binary) {
-			const custom = await executable(setting);
-			return custom ? { command: custom, args: [] as string[], source: 'External installation' } : undefined;
-		}
-		if (await this.isInstalled(id)) {
+		if (setting === agent.binary && await this.isInstalled(id)) {
 			const node = await executable('node');
 			if (node) { return { command: node, args: [this.entry(this.directory(id), id)], source: 'Installed by Otrion' }; }
 		}
-		const command = await executable(agent.binary);
-		return command ? { command, args: [] as string[], source: 'External installation' } : undefined;
+		const external = await resolveCommand(setting, '@agentclientprotocol/' + agent.binary, 'dist/index.js');
+		return external ? { ...external, source: 'External installation' } : undefined;
 	}
 
 	private async authCommand(id: AgentId, launch: NonNullable<Awaited<ReturnType<AgentStore['launch']>>>) {
 		if (id === 'claude') { return { command: launch.command, args: [...launch.args, '--cli', 'auth'] }; }
 		if (launch.args.length) {
-			const cli = createRequire(launch.args[0]).resolve('@openai/codex/bin/codex.js');
-			return { command: launch.command, args: [cli, 'login'] };
+			try {
+				const cli = createRequire(launch.args[0]).resolve('@openai/codex/bin/codex.js');
+				return { command: launch.command, args: [cli, 'login'] };
+			} catch (error) {
+				if (error.code !== 'MODULE_NOT_FOUND') { throw error; }
+			}
 		}
-		const command = await executable('codex');
-		if (!command) { throw new Error('Install the Codex CLI or the Otrion-managed adapter.'); }
-		return { command, args: ['login'] };
+		const cli = await resolveCommand('codex', '@openai/codex', 'bin/codex.js');
+		if (!cli) { throw new Error('Install the Codex CLI or the Otrion-managed adapter.'); }
+		return { command: cli.command, args: [...cli.args, 'login'] };
 	}
 
 	async authStatus(id: AgentId, launch: NonNullable<Awaited<ReturnType<AgentStore['launch']>>>) {
@@ -173,8 +224,10 @@ export class AgentStore {
 		const launch = await this.launch(id);
 		if (!launch || !allowed(id)) { throw new Error('Install and allow this agent first.'); }
 		const cli = await this.authCommand(id, launch);
-		const args = id === 'claude' ? [...cli.args, 'login'] : cli.args;
-		vscode.window.createTerminal({ name: agents[id].name + ' Sign In', shellPath: cli.command, shellArgs: args, cwd: homedir() }).show();
+		const args = [...cli.args];
+		if (id === 'claude') { args.push('login'); }
+		else if (vscode.env.remoteName) { args.push('--device-auth'); }
+		vscode.window.createTerminal({ name: agents[id].name + ' Sign In', shellPath: cli.command, shellArgs: args, cwd: vscode.Uri.file(homedir()) }).show();
 	}
 
 	async install(id: AgentId) {
@@ -186,11 +239,13 @@ export class AgentStore {
 			const args = ['install', '--prefix', staging, '--no-save', '--no-package-lock', '--no-audit', '--no-fund',
 				'@agentclientprotocol/' + agents[id].binary + '@' + agents[id].version];
 			const node = await executable('node');
-			if (!node) { throw new Error('Install Node.js and npm, then restart Otrion.'); }
-			// Windows npm.cmd is a shell shim. Run the npm CLI directly with Node.
-			const npm = process.platform === 'win32' ? path.join(path.dirname(node), 'node_modules', 'npm', 'bin', 'npm-cli.js') : await executable('npm');
-			if (!npm || !await fileExists(npm)) { throw new Error('Install npm alongside Node.js, then restart Otrion.'); }
-			await promisify(execFile)(process.platform === 'win32' ? node : npm, process.platform === 'win32' ? [npm, ...args] : args, { cwd: staging, timeout: 300_000, windowsHide: true });
+			const npm = node && await npmCommand(node);
+			if (!npm) {
+				throw new Error(vscode.env.remoteName
+					? vscode.l10n.t('Install Node.js and npm on the remote host, make them available on PATH, and reconnect.')
+					: vscode.l10n.t('Install Node.js and npm, then restart Otrion.'));
+			}
+			await promisify(execFile)(npm.command, [...npm.args, ...args], { cwd: staging, timeout: 300_000, windowsHide: true });
 			if (!await fileExists(this.entry(staging, id))) { throw new Error('The downloaded adapter is missing its entry point.'); }
 			try {
 				await rename(staging, target);

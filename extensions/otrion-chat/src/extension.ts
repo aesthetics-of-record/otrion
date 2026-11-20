@@ -178,7 +178,7 @@ export function activate(context: vscode.ExtensionContext) {
 			switch (message?.type) {
 				case 'fileIcon':
 					if (typeof message.uri === 'string' && message.uri.startsWith('file:') && Number.isSafeInteger(message.request)) {
-						void vscode.commands.executeCommand<string>('_otrion.chat.fileIcon', message.uri, message.folder === true).then(
+						void vscode.commands.executeCommand<string>('_otrion.chat.fileIcon', vscode.Uri.parse(message.uri), message.folder === true).then(
 							src => webview.postMessage({ type: 'fileIcon', request: message.request, src }),
 							() => webview.postMessage({ type: 'fileIcon', request: message.request })
 						);
@@ -210,8 +210,13 @@ export function activate(context: vscode.ExtensionContext) {
 				case 'addResources':
 					if (Array.isArray(message.uris)) {
 						const files: vscode.Uri[] = [];
-						for (const uri of message.uris) {
-							if (typeof uri === 'string' && uri.startsWith('file://')) { files.push(vscode.Uri.parse(uri)); }
+						const authority = vscode.env.remoteAuthority;
+						for (const value of message.uris) {
+							if (typeof value !== 'string') { continue; }
+							const uri = vscode.Uri.parse(value);
+							if (authority ? uri.scheme === 'vscode-remote' && uri.authority === authority : uri.scheme === 'file') {
+								files.push(authority ? uri.with({ scheme: 'file', authority: '' }) : uri);
+							}
 						}
 						void tab.describeResources(files).then(parts => webview.postMessage({ type: 'insertResources', tabId: message.tabId, request: message.request, parts }));
 					}
