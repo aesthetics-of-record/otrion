@@ -147,6 +147,24 @@
 	overflow-wrap: anywhere;
 }
 
+.image-carousel-editor .attachment-layout .image-info-bar {
+	justify-content: space-between;
+	padding: 4px 12px;
+	gap: 8px;
+}
+
+.image-carousel-editor .attachment-layout .image-info-text {
+	display: flex;
+	align-items: baseline;
+	white-space: nowrap;
+}
+
+.image-carousel-editor .attachment-layout .caption-text {
+	overflow: hidden;
+	text-overflow: ellipsis;
+	color: var(--vscode-foreground);
+}
+
 .image-carousel-editor .image-actions {
 	flex-shrink: 0;
 }

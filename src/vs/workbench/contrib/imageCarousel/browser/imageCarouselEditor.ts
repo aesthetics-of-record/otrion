@@ -256,7 +256,7 @@ export class ImageCarouselEditor extends EditorPane implements IImageViewerEdito
 				]),
 			]),
 			h('div.bottom-bar@bottomBar', [
-				h('div.image-info-bar', [
+				h('div.image-info-bar@infoBar', [
 					h('span.image-info-text', [
 						h('span.caption-text@captionText'),
 						h('span.caption-separator@captionSeparator'),
@@ -268,6 +268,11 @@ export class ImageCarouselEditor extends EditorPane implements IImageViewerEdito
 				h('span.sr-only@ariaStatus'),
 			]),
 		]);
+
+		if (this.input instanceof ImageCarouselEditorInput && this.input.collection.attachmentLayout) {
+			elements.root.classList.add('attachment-layout');
+			elements.root.prepend(elements.infoBar);
+		}
 
 		// ARIA: set up slideshow container for screen readers
 		elements.root.setAttribute('role', 'group');
@@ -608,6 +613,13 @@ window.addEventListener("message",function(e){var m=e.data;if(m.type==="loadVide
 			class: ThemeIcon.asClassName(Codicon.cloudDownload),
 			run: () => this.downloadCurrentImage(),
 		})];
+		if (this.input instanceof ImageCarouselEditorInput && this.input.collection.attachmentLayout) {
+			actions.unshift(
+				toAction({ id: 'imagePreview.zoomOut', label: localize('zoomOut', "Zoom Out"), class: ThemeIcon.asClassName(Codicon.zoomOut), run: () => this._viewer?.zoomOut() }),
+				toAction({ id: 'imagePreview.zoomIn', label: localize('zoomIn', "Zoom In"), class: ThemeIcon.asClassName(Codicon.zoomIn), run: () => this._viewer?.zoomIn() }),
+				toAction({ id: 'imagePreview.copyImage', label: localize('copyImage', "Copy Image"), class: ThemeIcon.asClassName(Codicon.copy), run: () => this._viewer?.copyImage() }),
+			);
+		}
 		// Mark Up comes last, so that Download keeps its place when an image cannot be marked up.
 		if (canMarkUp) {
 			actions.push(toAction({

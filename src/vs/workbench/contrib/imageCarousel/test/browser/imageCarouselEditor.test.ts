@@ -191,6 +191,21 @@ suite('ImageCarouselEditor', () => {
 			return { editor, parent, closed, isMarkingUp: () => contextKeyService.getContextKeyValue(ImageCarouselMarkingUpContext.key) };
 		}
 
+		(isWeb ? test.skip : test)('puts attachment preview actions above the image and keeps the strip below', async () => {
+			const { editor, parent } = createEditor();
+			const input = store.add(new ImageCarouselEditorInput({
+				id: 'chat', title: 'Attached Images', attachmentLayout: true,
+				sections: [{ title: '', images: ['one', 'two'].map(id => ({
+					id, name: id + '.png', caption: id + '.png', mimeType: 'image/png', data: VSBuffer.fromString(id),
+				})) }],
+			}, 1));
+			await editor.setInput(input, undefined, {}, CancellationToken.None);
+			const topBar = parent.querySelector('.attachment-layout > :first-child')!;
+			assert.ok(topBar.classList.contains('image-info-bar'));
+			assert.deepStrictEqual([...topBar.querySelectorAll('.action-label')].map(el => el.getAttribute('aria-label')), ['Zoom Out', 'Zoom In', 'Copy Image', 'Download']);
+			assert.strictEqual(parent.querySelectorAll('.bottom-bar .thumbnail').length, 2);
+		});
+
 		/** A markup that applies `marked` when it is finished. */
 		function createMarkUp(marked: VSBuffer) {
 			const containers: HTMLElement[] = [];

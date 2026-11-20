@@ -11,7 +11,7 @@ import { Registry } from '../../../../platform/registry/common/platform.js';
 import { EditorPaneDescriptor, IEditorPaneRegistry } from '../../../browser/editor.js';
 import { EditorExtensions, IEditorFactoryRegistry, IEditorSerializer } from '../../../common/editor.js';
 import { IEditorService } from '../../../services/editor/common/editorService.js';
-import { VSBuffer } from '../../../../base/common/buffer.js';
+import { decodeBase64, VSBuffer } from '../../../../base/common/buffer.js';
 import { generateUuid } from '../../../../base/common/uuid.js';
 import { ImageCarouselEditor, ImageCarouselMarkingUpContext } from './imageCarouselEditor.js';
 import { ImageCarouselEditorInput } from './imageCarouselEditorInput.js';
@@ -112,6 +112,26 @@ function isSingleImageArgs(args: unknown): args is IOpenCarouselSingleImageArgs 
 		&& (args as IOpenCarouselSingleImageArgs).data instanceof Uint8Array;
 }
 
+/** Serialized image attachments from an extension-host chat. */
+function attachmentCollection(args: unknown): IOpenCarouselCollectionArgs | undefined {
+	if (!args || typeof args !== 'object' || !('attachments' in args) || !Array.isArray(args.attachments)
+		|| !('startIndex' in args) || typeof args.startIndex !== 'number' || !Number.isInteger(args.startIndex)
+		|| args.startIndex < 0 || args.startIndex >= args.attachments.length) {
+		return undefined;
+	}
+	const images: ICarouselImage[] = [];
+	for (const item of args.attachments) {
+		if (typeof item?.label !== 'string' || typeof item.image !== 'string') { return undefined; }
+		const header = /^data:(image\/(?:png|jpeg|webp|gif));base64,/.exec(item.image);
+		if (!header) { return undefined; }
+		images.push({ id: generateUuid(), name: item.label, caption: item.label, mimeType: header[1], data: decodeBase64(item.image.slice(header[0].length)) });
+	}
+	return {
+		collection: { id: generateUuid(), title: localize('attachedImages', "Attached Images"), attachmentLayout: true, sections: [{ title: '', images }] },
+		startIndex: args.startIndex,
+	};
+}
+
 // --- Actions ---
 
 class OpenImageInCarouselAction extends Action2 {
@@ -148,7 +168,9 @@ class OpenImageInCarouselAction extends Action2 {
 			};
 			startIndex = 0;
 		} else {
-			return;
+			const attachments = attachmentCollection(args);
+			if (!attachments) { return; }
+			({ collection, startIndex } = attachments);
 		}
 
 		const input = new ImageCarouselEditorInput(collection, startIndex);

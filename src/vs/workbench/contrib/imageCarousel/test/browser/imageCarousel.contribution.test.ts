@@ -99,6 +99,25 @@ suite('OpenImagesInCarouselFromExplorerAction', () => {
 		});
 	}
 
+	test('opens a chat attachment collection at the clicked image with its original bytes', async () => {
+		stubEditorService();
+		const { CommandsRegistry } = await import('../../../../../platform/commands/common/commands.js');
+		const command = CommandsRegistry.getCommand('workbench.action.chat.openImageInCarousel')!;
+		const attachments = [
+			{ label: 'first.png', image: 'data:image/png;base64,YQ==' },
+			{ label: 'second.webp', image: 'data:image/webp;base64,Yg==' },
+		];
+		await instantiationService.invokeFunction(command.handler, { attachments, startIndex: 2 });
+		assert.strictEqual(openedInputs.length, 0);
+		await instantiationService.invokeFunction(command.handler, { attachments, startIndex: 1 });
+		const { collection, startIndex } = openedInputs[0].input;
+		assert.strictEqual(startIndex, 1);
+		assert.strictEqual(collection.attachmentLayout, true);
+		assert.deepStrictEqual(collection.sections[0].images.map(image => [image.name, image.mimeType, image.data?.toString()]), [
+			['first.png', 'image/png', 'a'], ['second.webp', 'image/webp', 'b'],
+		]);
+	});
+
 	test('single image file opens carousel with sibling images', async () => {
 		const fileService = instantiationService.get(IFileService);
 		const parent = createExplorerItem('/workspace/images', true, fileService, configService);
