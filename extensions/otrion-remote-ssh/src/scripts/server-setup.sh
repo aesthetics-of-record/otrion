@@ -267,7 +267,7 @@ if [[ ! -f $SERVER_SCRIPT ]]; then
 
   if ! validate_installed_commit; then
     echo "Error: downloaded server commit $(get_installed_commit) does not match $DISTRO_COMMIT"
-    echo "Check that remote.SSH.serverDownloadUrlTemplate resolves to the server for this build; a \${commit} keyed URL cannot be ambiguous"
+    echo "Check that otrion.ssh.serverDownloadUrlTemplate resolves to the server for this build; a \${commit} keyed URL cannot be ambiguous"
 
     rm -rf "$SERVER_DIR"/*
 

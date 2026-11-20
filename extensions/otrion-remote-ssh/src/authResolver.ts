@@ -15,7 +15,8 @@ import { SocksClient, SocksClientOptions } from 'socks';
 import SSHDestination from './ssh/sshDestination';
 import SSHConnection, { SSHTunnelConfig } from './ssh/sshConnection';
 import { loadKnownHosts, matchHostKey, appendHostKey, replaceHostKey, removeHostFromEntry, findConflictingEntries, keyFingerprint, keyTypeOf, KnownHosts, KnownHostsEntry, KnownHostsFilesConfig } from './ssh/knownHosts';
-import type { SSHClient, SSHExecChannel } from './ssh/sshClient';
+import { createExecServer, type HostProcess } from './ssh/execServer';
+import type { SSHExecChannel } from './ssh/sshClient';
 import SSHConfiguration, { type HostConfiguration } from './ssh/sshConfig';
 import { gatherIdentityFiles, SSHKey } from './ssh/identityFiles';
 import { untildify, exists as fileExists } from './common/files';
@@ -210,8 +211,33 @@ export function resolveProxyJumps(
 
 export class RemoteSSHResolver implements vscode.RemoteAuthorityResolver, vscode.Disposable {
 
+    private hostExec?: { authority: string; server: vscode.ExecServer };
+    private resolving?: { authority: string; result: Thenable<vscode.ResolverResult> };
+
+    async resolveExecServer(authority: string, context: vscode.RemoteAuthorityResolverContext): Promise<vscode.ExecServer> {
+        if (this.hostExec?.authority !== authority) {
+            await (this.resolving?.authority === authority ? this.resolving.result : this.resolve(authority, context));
+        }
+        if (this.hostExec?.authority !== authority) {
+            throw vscode.RemoteAuthorityResolverError.NotAvailable('This SSH connection could not provide a Docker host execution channel.');
+        }
+        return this.hostExec.server;
+    }
+
+    private registerHostExec(authority: string, result: { platform: string; logFile: string }, open: (command: string) => Promise<HostProcess>) {
+        if (!['linux', 'darwin', 'win32'].includes(result.platform)) { return; }
+        const windows = result.platform === 'win32';
+        const paths = windows ? path.win32 : path.posix;
+        // The SSH installer names its log .<server install key>.log, beside bin/<key>.
+        const key = paths.basename(result.logFile).match(/^\.(.+)\.log$/)?.[1];
+        if (key) {
+            const root = paths.join(paths.dirname(result.logFile), 'bin', key);
+            this.hostExec = { authority, server: createExecServer(root, open, windows) };
+        }
+    }
+
     private proxyConnections: SSHConnection[] = [];
-    private sshConnection: SSHClient | undefined;
+    private sshConnection: SSHConnection | undefined;
     private sshAgentSock: string | undefined;
     private proxyCommandProcess: cp.ChildProcessWithoutNullStreams | undefined;
     private agentForwardSession: SSHExecChannel | undefined;
@@ -241,7 +267,8 @@ export class RemoteSSHResolver implements vscode.RemoteAuthorityResolver, vscode
 
         const destination = SSHDestination.parseEncoded(dest);
 
-        return vscode.window.withProgress({
+        this.hostExec = undefined;
+        const result = vscode.window.withProgress({
             title: `Setting up SSH Host ${destination.hostname}`,
             location: vscode.ProgressLocation.Notification,
             cancellable: false
@@ -249,13 +276,17 @@ export class RemoteSSHResolver implements vscode.RemoteAuthorityResolver, vscode
             const sshconfig = await SSHConfiguration.loadFromFS();
 
            try {
-                return await this.connect(destination, sshconfig);
+                return await this.connect(destination, sshconfig, authority);
             } catch (e: unknown) {
                 this.logger.error(`Error resolving authority`, e);
 
                 return await this.throwOrCommand(context, destination, e);
             }
         });
+        this.resolving = { authority, result };
+        const clear = () => { if (this.resolving?.result === result) { this.resolving = undefined; } };
+        void result.then(clear, clear);
+        return result;
     }
 
     private async throwOrCommand(context: vscode.RemoteAuthorityResolverContext, destination: SSHDestination, error: unknown): Promise<never> {
@@ -279,8 +310,8 @@ export class RemoteSSHResolver implements vscode.RemoteAuthorityResolver, vscode
         }
     }
 
-    private async connect(destination: SSHDestination, sshconfig: SSHConfiguration): Promise<vscode.ResolverResult> {
-        const remoteSSHconfig = vscode.workspace.getConfiguration('remote.SSH');
+    private async connect(destination: SSHDestination, sshconfig: SSHConfiguration, authority: string): Promise<vscode.ResolverResult> {
+        const remoteSSHconfig = vscode.workspace.getConfiguration('otrion.ssh');
         const enableDynamicForwarding = remoteSSHconfig.get<boolean>('enableDynamicForwarding', true)!;
         const enableAgentForwarding = remoteSSHconfig.get<boolean>('enableAgentForwarding', true)!;
         const serverDownloadUrlTemplate = remoteSSHconfig.get<string>('serverDownloadUrlTemplate');
@@ -393,6 +424,7 @@ export class RemoteSSHResolver implements vscode.RemoteAuthorityResolver, vscode
                     },
                 });
 
+                this.registerHostExec(authority, registryEntry, cmd => manager.openExec(cmd));
                 const resolvedResult: vscode.ResolverResult = new vscode.ResolvedAuthority(
                     '127.0.0.1',
                     tunnel.localPort,
@@ -623,6 +655,17 @@ export class RemoteSSHResolver implements vscode.RemoteAuthorityResolver, vscode
             }
         });
 
+        const connection = this.sshConnection;
+        this.registerHostExec(authority, installResult, async cmd => {
+            const channel = await connection.execChannel(cmd);
+            const exit = new Promise<vscode.ProcessExit>(resolve => {
+                let status = 1;
+                channel.once('exit', code => { status = typeof code === 'number' ? code : 1; });
+                channel.once('close', () => resolve({ status }));
+                channel.once('error', error => resolve({ status: 1, message: error.message }));
+            });
+            return { stdin: channel, stdout: channel, stderr: channel.stderr, exit };
+        });
         const resolvedResult: vscode.ResolverResult = new vscode.ResolvedAuthority('127.0.0.1', tunnelConfig.localPort, installResult.connectionToken);
         resolvedResult.extensionHostEnv = envVariables;
         return resolvedResult;
@@ -723,7 +766,7 @@ export class RemoteSSHResolver implements vscode.RemoteAuthorityResolver, vscode
                     return true;
                 }
                 if (unknownPolicy === 'reject') {
-                    this.logger.error(`Rejecting unknown ${keyType} host key for ${hostname} (${fingerprint}) — remote.SSH.verifyUnknownHosts is 'reject'`);
+                    this.logger.error(`Rejecting unknown ${keyType} host key for ${hostname} (${fingerprint}) — otrion.ssh.verifyUnknownHosts is 'reject'`);
                     return false;
                 }
 

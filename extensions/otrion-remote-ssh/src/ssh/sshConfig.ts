@@ -31,7 +31,7 @@ const systemSSHConfig = isWindows ? path.resolve(process.env.ALLUSERSPROFILE || 
 export const defaultSSHConfigPath = path.resolve(os.homedir(), '.ssh/config');
 
 export function getSSHConfigPath() {
-    const sshConfigPath = vscode.workspace.getConfiguration('remote.SSH').get<string>('configFile');
+    const sshConfigPath = vscode.workspace.getConfiguration('otrion.ssh').get<string>('configFile');
     return sshConfigPath ? untildify(sshConfigPath) : defaultSSHConfigPath;
 }
 

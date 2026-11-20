@@ -83,10 +83,33 @@ export class NativeSshManager {
     private get connection(): NativeSshConnectionOptions { return this.options.connection; }
     private get registry(): NativeSshRegistry { return this.options.registry; }
 
+    private askpassEnv() {
+        return {
+            DISPLAY: process.env.DISPLAY || '1',
+            ELECTRON_RUN_AS_NODE: '1',
+            SSH_ASKPASS: this.options.askpassPath,
+            SSH_ASKPASS_REQUIRE: 'force',
+            NATIVE_SSH_NODE_BIN: process.execPath,
+            NATIVE_SSH_ASKPASS_NODE_SCRIPT: this.options.askpassNodeScriptPath,
+            NATIVE_SSH_ASKPASS_SOCKET: this.options.askpassSocketPath,
+        };
+    }
+
+    async openExec(command: string) {
+        const args = computeSshArgs(this.connection.sshDestination, ['-T']);
+        const child = cp.spawn(this.connection.sshExecutable, [...args, command], {
+            env: { ...process.env, ...this.askpassEnv() }, windowsHide: true
+        });
+        const exit = new Promise<vscode.ProcessExit>(resolve => {
+            child.once('error', error => resolve({ status: 1, message: error.message }));
+            child.once('close', code => resolve({ status: code ?? 1 }));
+        });
+        return { stdin: child.stdin, stdout: child.stdout, stderr: child.stderr, exit };
+    }
+
     async initialize(installScriptInputs: NativeInstallInputs): Promise<NativeSshRegistryEntry> {
         let registryEntry = await this.acquire();
         if (!registryEntry) {
-            await this.waitAuthSucceeded();
             await this.waitRemoteShellReady();
 
             const platform = await this.probeRemotePlatform();
@@ -416,7 +439,7 @@ export class NativeSshManager {
         }
         const exitCode = parseInt(resultMap.exitCode, 10);
         if (exitCode !== 0) {
-            throw new ServerInstallError(`Couldn't install vscode server on remote server, install script returned non-zero exit status`);
+            throw new ServerInstallError(`Couldn't install the Otrion server on the SSH host, install script returned non-zero exit status`);
         }
 
         const listeningOn = resultMap.listeningOn.match(/^\d+$/)
@@ -470,21 +493,12 @@ export class NativeSshManager {
             registryFilePath: this.registry.filePath
         };
 
-        const envVars = {
-            DISPLAY: process.env.DISPLAY || '1',
-            ELECTRON_RUN_AS_NODE: '1',
-            SSH_ASKPASS: this.options.askpassPath,
-            SSH_ASKPASS_REQUIRE: 'force',
-            NATIVE_SSH_NODE_BIN: process.execPath,
-            NATIVE_SSH_ASKPASS_NODE_SCRIPT: this.options.askpassNodeScriptPath,
-            NATIVE_SSH_ASKPASS_SOCKET: this.options.askpassSocketPath,
-        };
         const child = cp.spawn(process.execPath, [serverScriptPath, JSON.stringify(serverConfig)], {
             detached: true,
             stdio: 'pipe',
             env: {
                 ...process.env,
-                ...envVars
+                ...this.askpassEnv()
             },
         });
         child.unref();
@@ -521,12 +535,17 @@ export class NativeSshManager {
         if (!pid) {
             throw new Error('Native SSH local server failed to spawn: no pid assigned.');
         }
-        this.options.logger.info(`Spawned ssh server pid=${pid} socket=${serverConfig.socketPath} env=${JSON.stringify(envVars)}`);
+        this.options.logger.info(`Spawned ssh server pid=${pid} socket=${serverConfig.socketPath}`);
 
         this.serverProcess = child;
         this.attachParsers();
 
-        await this.waitUntilSshServerReady(serverConfig.socketPath, () => spawnError, SERVER_READY_TIMEOUT_MS);
+        // A multiplexed or local connection can authenticate before the helper's
+        // first health check completes. Subscribe while both streams are attached.
+        await Promise.all([
+            this.waitAuthSucceeded(),
+            this.waitUntilSshServerReady(serverConfig.socketPath, () => spawnError, SERVER_READY_TIMEOUT_MS)
+        ]);
 
         return {
             pid,

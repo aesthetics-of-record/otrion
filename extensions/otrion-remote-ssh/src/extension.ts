@@ -7,13 +7,12 @@ import { HostTreeDataProvider } from './hostTreeView';
 import { getRemoteWorkspaceLocationData, RemoteLocationHistory } from './remoteLocationHistory';
 
 export async function activate(context: vscode.ExtensionContext) {
-    const extensionId = context.extension.id;
     const packageJSON = context.extension.packageJSON;
 
-    const logger = new Log('Remote - SSH');
+    const logger = new Log(packageJSON.displayName);
     context.subscriptions.push(logger);
 
-    logger.info(`${extensionId}/${packageJSON.version} (${os.release()} ${os.platform()} ${os.arch()}) vscode/${vscode.version} (${vscode.env.appName})`);
+    logger.info(`${packageJSON.displayName}/${packageJSON.version} (${os.release()} ${os.platform()} ${os.arch()}) ${vscode.env.appName} (API ${vscode.version})`);
 
     const remoteSSHResolver = new RemoteSSHResolver(context, logger);
     context.subscriptions.push(vscode.workspace.registerRemoteAuthorityResolver(REMOTE_SSH_AUTHORITY, remoteSSHResolver));
@@ -26,13 +25,13 @@ export async function activate(context: vscode.ExtensionContext) {
     }
 
     const hostTreeDataProvider = new HostTreeDataProvider(locationHistory);
-    context.subscriptions.push(vscode.window.createTreeView('sshHosts', { treeDataProvider: hostTreeDataProvider }));
+    context.subscriptions.push(vscode.window.createTreeView('otrion.ssh.hosts', { treeDataProvider: hostTreeDataProvider }));
     context.subscriptions.push(hostTreeDataProvider);
 
-    context.subscriptions.push(vscode.commands.registerCommand('openremotessh.openEmptyWindow', () => promptOpenRemoteSSHWindow(false)));
-    context.subscriptions.push(vscode.commands.registerCommand('openremotessh.openEmptyWindowInCurrentWindow', () => promptOpenRemoteSSHWindow(true)));
-    context.subscriptions.push(vscode.commands.registerCommand('openremotessh.openConfigFile', () => openSSHConfigFile()));
-    context.subscriptions.push(vscode.commands.registerCommand('openremotessh.showLog', () => logger.show()));
+    context.subscriptions.push(vscode.commands.registerCommand('otrion.ssh.openEmptyWindow', () => promptOpenRemoteSSHWindow(false)));
+    context.subscriptions.push(vscode.commands.registerCommand('otrion.ssh.openEmptyWindowInCurrentWindow', () => promptOpenRemoteSSHWindow(true)));
+    context.subscriptions.push(vscode.commands.registerCommand('otrion.ssh.openConfigFile', () => openSSHConfigFile()));
+    context.subscriptions.push(vscode.commands.registerCommand('otrion.ssh.showLog', () => logger.show()));
 }
 
 export function deactivate() {

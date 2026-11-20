@@ -358,7 +358,7 @@ function parseInstallOutput(
 
     const exitCode = parseInt(resultMap.exitCode, 10);
     if (exitCode !== 0) {
-        throw new ServerInstallError(`Couldn't install vscode server on remote server, install script returned non-zero exit status`);
+        throw new ServerInstallError(`Couldn't install the Otrion server on the SSH host, install script returned non-zero exit status`);
     }
 
     const listeningOn = resultMap.listeningOn.match(/^\d+$/)
