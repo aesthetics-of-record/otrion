@@ -41,15 +41,20 @@ article { margin: 18px 0 22px; min-width: 0; line-height: 1.55; }
 .error .message-body { white-space: pre-wrap; }
 .code-block { border: 1px solid var(--line); border-radius: 7px; background: var(--surface); overflow: hidden; margin: 9px 0; }
 .code-bar { display: flex; justify-content: space-between; align-items: center; padding: 4px 8px; border-bottom: 1px solid var(--line); font: 11px var(--mono); color: var(--muted); }
-.code-bar button, #configure { border-radius: 3px; padding: 3px 5px; }
+.code-bar button { border-radius: 3px; padding: 3px 5px; }
 pre { overflow-x: auto; padding: 10px; margin: 0; font: 12px/1.55 var(--mono); }
 pre code { font: inherit; }
 footer { position: relative; flex: none; padding: 0 10px 9px; }
 #setup, #status { margin: 0 2px 7px; font-size: 12px; color: var(--muted); }
 #status:empty { display: none; }
 #status.working::before { content: ''; display: inline-block; width: 6px; height: 6px; margin: 0 7px 1px 0; border-radius: 50%; background: var(--accent); }
-#setup { display: flex; align-items: baseline; justify-content: space-between; gap: 5px; flex-wrap: wrap; }
-#configure { color: var(--accent); text-decoration: underline; }
+#setup { margin: 0 0 8px; padding: 10px 12px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); }
+#setup-title { color: var(--vscode-foreground); font-size: 13px; font-weight: 600; }
+#setup-text { margin: 3px 0 0; line-height: 1.45; overflow-wrap: anywhere; }
+.setup-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 4px 8px; margin-top: 8px; }
+.setup-actions button { min-height: 25px; padding: 3px 8px; border-radius: 4px; font-size: 12px; color: var(--accent); }
+#setup:not(.retry-first) #configure, #setup.retry-first #retry-connection { color: var(--vscode-button-secondaryForeground); background: var(--vscode-button-secondaryBackground); }
+#setup:not(.retry-first) #configure:hover, #setup.retry-first #retry-connection:hover { background: var(--vscode-button-secondaryHoverBackground); }
 form { padding: 8px; border: 1px solid var(--vscode-input-border, var(--line)); border-radius: 12px; background: color-mix(in srgb, var(--surface) 94%, var(--vscode-foreground)); }
 form:focus-within { border-color: var(--vscode-focusBorder); }
 #input {
@@ -144,7 +149,6 @@ form:focus-within { border-color: var(--vscode-focusBorder); }
 #recent-list small, #recent-status { font-size: 11px; color: var(--muted); }
 #recent-status { white-space: pre-line; margin: 6px 0; }
 
-#retry-connection { color: var(--accent); padding: 2px 5px; margin-bottom: 6px; border-radius: 4px; }
 
 .markdown-body { line-height: 1.55; overflow-wrap: anywhere; }
 .markdown-body > :first-child { margin-top: 0; }

@@ -8,6 +8,8 @@ import { agents, AgentStore, allowed, type AgentId } from './agents';
 import { readSessionOptions, type SessionOption } from './sessionOptions';
 import { applyTranscriptUpdate, type ChatMessage } from './transcript';
 
+class AgentSetupError extends Error {}
+
 interface Turn {
 	cancelled: boolean;
 	prompting: boolean;
@@ -48,7 +50,7 @@ export function createSession(context: vscode.ExtensionContext, store: AgentStor
 	const messages = record.messages;
 	let disposed = false;
 	let status = '';
-	let connectionFailed = false;
+	let connectionIssue: 'setup' | 'connection' | undefined;
 
 	let options: SessionOption[] = [];
 	let usage: { used: number; size: number } | undefined;
@@ -92,7 +94,7 @@ export function createSession(context: vscode.ExtensionContext, store: AgentStor
 	function snapshot() {
 		clearUpdates();
 		changed();
-		void emit({ type: 'state', tabId: record.id, messages, status, connectionFailed, busy: !!turn, selected,
+		void emit({ type: 'state', tabId: record.id, messages, status, connectionIssue, remote: !!vscode.env.remoteAuthority, busy: !!turn, selected,
 			allowed: allowed(selected), trusted: vscode.workspace.isTrusted, ...metadata() });
 	}
 
@@ -142,11 +144,15 @@ export function createSession(context: vscode.ExtensionContext, store: AgentStor
 		const workspace = await workspaceDirectory(context);
 		const cwd = record.cwd ?? workspace;
 		const launch = await store.launch(id);
-		const env = await store.agentEnvironment(id);
+		const env = launch ? await store.agentEnvironment(id, launch) : undefined;
 		if (disposed || turn?.cancelled || !allowed(id) || !vscode.workspace.isTrusted) {
 			throw new Error('Agent session cancelled.');
 		}
-		if (!launch) { throw new Error('Open Agent settings to install ' + agents[id].name + ' or configure its adapter path.'); }
+		if (!launch || !env) {
+			throw new AgentSetupError(vscode.env.remoteAuthority
+				? 'Install the adapter on the SSH host or check its configured path.'
+				: 'Install the adapter on this computer or check its configured path.');
+		}
 		// Codex may only persist a thread after its first prompt. Older local tabs have an ordinal.
 		const previousId = record.pendingFirstPrompt ? undefined : record.remoteId;
 		let replay: ChatMessage[] | undefined = previousId ? [] : undefined;
@@ -191,7 +197,7 @@ export function createSession(context: vscode.ExtensionContext, store: AgentStor
 	async function configure(change?: { id: string; value: unknown }) {
 		if (turn || configuring || !allowed(selected) || !vscode.workspace.isTrusted) { snapshot(); return; }
 		configuring = true;
-		connectionFailed = false;
+		connectionIssue = undefined;
 		status = client ? '' : record.remoteId ? 'Loading conversation…' : 'Loading session options…';
 		snapshot();
 		try {
@@ -208,7 +214,7 @@ export function createSession(context: vscode.ExtensionContext, store: AgentStor
 			}
 		} catch (error) {
 			status = error.message;
-			connectionFailed = !client || client.closed;
+			connectionIssue = error instanceof AgentSetupError ? 'setup' : !client || client.closed ? 'connection' : undefined;
 			if (client?.closed) { disconnect(); }
 		} finally {
 			configuring = false;
@@ -289,7 +295,7 @@ export function createSession(context: vscode.ExtensionContext, store: AgentStor
 		const name = agents[id].name;
 		const active: Turn = { cancelled: false, prompting: false, start: messages.length };
 		turn = active;
-		connectionFailed = false;
+		connectionIssue = undefined;
 		const pendingMessage = { role: 'You', text };
 		messages.push(pendingMessage);
 		status = client ? 'Waiting for ' + name + '…' : 'Connecting to ' + name + '…';
@@ -308,10 +314,14 @@ export function createSession(context: vscode.ExtensionContext, store: AgentStor
 		} catch (error) {
 			disconnect();
 			emit({ type: 'restoreDraft', tabId: record.id, parts: input });
-			if (!active.cancelled) {
+			if (!active.prompting && messages.at(-1) === pendingMessage) { messages.pop(); }
+			if (!active.cancelled && !active.prompting) {
+				connectionIssue = error instanceof AgentSetupError ? 'setup' : 'connection';
+				status = error.message;
+			} else if (!active.cancelled) {
 				messages.push({ role: 'Connection', text: error.message });
+				status = '';
 			}
-			status = '';
 		} finally {
 			clearTimeout(active.timer);
 			if (active.cancelled || !client || client.closed) {
@@ -382,5 +392,9 @@ export function createSession(context: vscode.ExtensionContext, store: AgentStor
 		if (!client || client.closed || authRevision !== connectedRevision) { void configure(); }
 		else { snapshot(); }
 	}
-	return { invalidateAuth() { authRevision++; }, get busy() { return !!turn; }, select, snapshot, send, openLink, stop, configure, attach, describeResources, findContext, suspend, dispose() { disposed = true; search?.cancel(); suspend(); } };
+	async function retrySetup() {
+		if (connectionIssue === 'setup') { await configure(); }
+	}
+
+	return { retrySetup, invalidateAuth() { authRevision++; }, get busy() { return !!turn; }, select, snapshot, send, openLink, stop, configure, attach, describeResources, findContext, suspend, dispose() { disposed = true; search?.cancel(); suspend(); } };
 }

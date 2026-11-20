@@ -2,6 +2,9 @@
 
 const assert = require('node:assert/strict');
 const fs = require('node:fs/promises');
+const { execFile } = require('node:child_process');
+const { createServer } = require('node:http');
+const { promisify } = require('node:util');
 const { registerHooks } = require('node:module');
 const os = require('node:os');
 const path = require('node:path');
@@ -88,13 +91,21 @@ test('Remote SSH agents use the host runtime, credentials and file paths', async
 			} else {
 				await fs.writeFile(path.join(bin, binary), '#!/usr/bin/env node\n' + executable, { mode: 0o755 });
 			}
-			const environment = await store.agentEnvironment(agent);
 			const context = { extension: { packageJSON: { version: '0.1.0' } }, globalState: { get: (_, fallback) => fallback, update: async () => {} } };
 			const record = { id: agent, agent, messages: [] };
-			const runtime = { launch: id => store.launch(id), agentEnvironment: async () => environment };
+			const runtime = { launch: id => store.launch(id), agentEnvironment: (id, launch) => store.agentEnvironment(id, launch) };
 			mock.workspace.getConfiguration = () => ({ get: (key, fallback) => key.endsWith('Allowed') || fallback });
-			const session = createSession(context, runtime, record, () => {}, () => {});
+			let available = false;
+			const states = [];
+			const session = createSession(context, { ...runtime, launch: id => available ? runtime.launch(id) : undefined }, record, msg => states.push(msg), () => {});
 			try {
+				await session.configure();
+				assert.equal(states.at(-1).connectionIssue, 'setup');
+				assert.match(states.at(-1).status, /SSH host/);
+				available = true;
+				await session.retrySetup();
+				assert.equal(states.at(-1).connectionIssue, undefined);
+				assert.equal(states.at(-1).connected, true);
 				// VS Code may encode the Windows drive colon. The ACP agent expects a standard file URL.
 				const resource = pathToFileURL(attached).href.replace(/^file:\/\/\/([a-z]):/i, 'file:///$1%3A');
 				await session.send([{ type: 'resource_link', uri: resource }]);
@@ -116,6 +127,8 @@ test('Remote SSH agents use the host runtime, credentials and file paths', async
 		await store.signIn('codex');
 		assert.deepEqual(terminal.shellArgs.slice(-2), ['login', '--device-auth']);
 		assert.equal(terminal.cwd.fsPath, os.homedir());
+
+		await testManagedInstall(root, store, agents, mock);
 	} finally {
 		hooks.deregister();
 		delete globalThis.__otrionTestVscode;
@@ -123,3 +136,63 @@ test('Remote SSH agents use the host runtime, credentials and file paths', async
 		await fs.rm(root, { recursive: true, force: true, maxRetries: 5 });
 	}
 });
+
+// Use the real packaged npm against a loopback registry. Each fixture's install script
+// spawns "node" by name, just like dependencies that need the host runtime during setup.
+async function testManagedInstall(root, store, agents, mock) {
+	const appRoot = process.env.OTRION_CHAT_TEST_EXTENSION ? path.resolve(extension, '../..') : path.join(root, 'server');
+	const npmDir = path.join(appRoot, 'agent-tools', 'npm');
+	if (!process.env.OTRION_CHAT_TEST_EXTENSION) {
+		await fs.cp(await fs.realpath(path.join(extension, '../../build/node_modules/otrion-npm-cli')), npmDir, { recursive: true, dereference: true });
+	}
+	mock.env.appRoot = appRoot;
+	const npm = path.join(npmDir, 'bin', 'npm-cli.js');
+	const files = new Map();
+	for (const agent of Object.values(agents)) {
+		const pkg = path.join(root, agent.binary);
+		await fs.mkdir(path.join(pkg, 'dist'), { recursive: true });
+		const name = '@agentclientprotocol/' + agent.binary;
+		await fs.writeFile(path.join(pkg, 'package.json'), JSON.stringify({ name, version: agent.version,
+			scripts: { postinstall: 'node record-runtime.js' } }));
+		await fs.writeFile(path.join(pkg, 'record-runtime.js'), "require('node:fs').writeFileSync('install-runtime', process.execPath)");
+		await fs.writeFile(path.join(pkg, 'dist/index.js'), 'console.log(process.execPath)');
+		const { stdout } = await promisify(execFile)(process.execPath, [npm, 'pack', '--json', '--ignore-scripts', '--cache', path.join(root, 'cache')], { cwd: pkg });
+		const [{ filename, integrity }] = JSON.parse(stdout);
+		files.set(name, { version: agent.version, integrity, tar: await fs.readFile(path.join(pkg, filename)) });
+	}
+	const registry = createServer((req, res) => {
+		const name = decodeURIComponent(req.url.slice(1)).replace(/\.tgz$/, '');
+		const entry = files.get(name);
+		if (!entry) { res.writeHead(404).end(); return; }
+		if (req.url.endsWith('.tgz')) { res.end(entry.tar); return; }
+		const { version, integrity } = entry;
+		res.setHeader('Content-Type', 'application/json');
+		res.end(JSON.stringify({ name, 'dist-tags': { latest: version }, versions: { [version]: {
+			name, version, hasInstallScript: true, dist: { tarball: registryUrl + encodeURIComponent(name) + '.tgz', integrity }
+		} } }));
+	});
+	await new Promise((resolve, reject) => registry.once('error', reject).listen(0, '127.0.0.1', resolve));
+	const registryUrl = 'http://127.0.0.1:' + registry.address().port + '/';
+	const oldRegistry = process.env.npm_config_registry;
+	try {
+		process.env.npm_config_registry = registryUrl;
+		const shellDir = path.join(root, 'shell-only');
+		await fs.mkdir(shellDir);
+		if (!windows) { await fs.symlink('/bin/sh', path.join(shellDir, 'sh')); }
+		process.env.PATH = windows ? path.dirname(process.env.ComSpec || 'C:\\Windows\\System32\\cmd.exe') : shellDir;
+		for (const id of Object.keys(agents)) {
+			await store.install(id);
+			const launch = await store.launch(id);
+			assert.equal(launch.source, 'Installed by Otrion');
+			assert.equal(launch.command, process.execPath);
+			assert.equal(await fs.readFile(path.resolve(launch.args[0], '../../install-runtime'), 'utf8'), process.execPath);
+			const env = await store.agentEnvironment(id, launch);
+			const result = await promisify(execFile)(launch.command, launch.args, { env });
+			assert.equal(result.stdout.trim(), process.execPath);
+			await store.install(id); // already installed
+		}
+	} finally {
+		if (oldRegistry === undefined) { delete process.env.npm_config_registry; } else { process.env.npm_config_registry = oldRegistry; }
+		await new Promise(resolve => registry.close(resolve));
+	}
+}

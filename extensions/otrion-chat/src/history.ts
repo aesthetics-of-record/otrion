@@ -37,9 +37,10 @@ export class SessionHistory {
 			try {
 				const cwd = await workspaceDirectory(this.context);
 				const launch = await this.store.launch(agent);
-				const env = await this.store.agentEnvironment(agent);
 				if (generation !== this.generation || !allowed(agent)) { return; }
 				if (!launch) { throw new Error('Install the adapter in Otrion Settings.'); }
+				const env = await this.store.agentEnvironment(agent, launch);
+				if (generation !== this.generation || !allowed(agent)) { return; }
 				client = new AcpClient(agent, launch.command, launch.args, cwd, env, () => {});
 				this.clients.add(client);
 				await client.listSessions(this.context.extension.packageJSON.version, sessions => {

@@ -551,6 +551,13 @@ function prepareCopilotRipgrepShimTaskREH(platform: string, arch: string, destin
 				prepareCopilotRipgrepShimTaskREH(platform, arch, destinationFolderName)
 			];
 
+			if (type === 'reh') {
+				packageTasks.push(task.define('package-otrion-agent-npm', async () => {
+					const npm = await fs.promises.realpath(path.join(import.meta.dirname, 'node_modules', 'otrion-npm-cli'));
+					await fs.promises.cp(npm, path.join(BUILD_ROOT, destinationFolderName, 'agent-tools', 'npm'), { recursive: true, dereference: true });
+				}));
+			}
+
 			if (platform === 'win32') {
 				packageTasks.push(patchWin32DependenciesTask(destinationFolderName));
 			}

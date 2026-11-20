@@ -37,6 +37,15 @@
 	reset.addEventListener('click', () => host.postMessage({ action: 'resetGallery' }));
 	reload.addEventListener('click', () => host.postMessage({ action: 'reload' }));
 	window.addEventListener('message', ({ data }) => {
+		if (data.focusAgent) {
+			const target = sections.find(section => section.id === data.focusAgent);
+			if (target) {
+				if (target.hidden) { search.value = ''; search.dispatchEvent(new Event('input')); }
+				target.focus({ preventScroll: true });
+				target.scrollIntoView({ block: 'nearest' });
+				host.postMessage({ action: 'focusedAgent', id: target.id });
+			}
+		}
 		if (data.gallery) {
 			service.value = data.gallery.serviceUrl;
 			item.value = data.gallery.itemUrl;
@@ -66,13 +75,13 @@
 			}
 			section.querySelector('.auth-note')!.textContent = byok
 				? 'Uses your ' + (row.id === 'codex' ? 'OpenAI' : 'Anthropic') + ' API billing from the next request.'
-				: 'Uses the credentials configured in your local CLI.';
+				: data.remote ? 'Uses the CLI account on this host.' : 'Uses the credentials configured in your local CLI.';
 			auth.textContent = byok ? (row.hasKey ? 'API key saved' : 'API key required') : row.auth === 'Unknown' ? 'Login status unavailable' : row.auth ?? (row.source ? 'Enable to check sign-in' : '');
 			auth.classList.toggle('signed-in', byok ? row.hasKey : row.auth === 'Signed in');
 			primary.hidden = enabled;
 			primary.dataset.action = row.source ? 'enable' : 'install';
 			primary.disabled = row.installing || (!row.source && row.installed);
-			primary.textContent = row.installing ? 'Installing…' : row.source ? 'Enable' : row.installed ? 'Unavailable' : 'Install';
+			primary.textContent = row.installing ? (data.remote ? 'Installing on SSH host…' : 'Installing…') : row.source ? 'Enable' : row.installed ? 'Unavailable' : 'Install';
 			section.querySelector<HTMLElement>('.enabled')!.hidden = !enabled;
 			section.querySelector('.agent-info')!.setAttribute('title', row.availability);
 			const menu = section.querySelector<HTMLElement>('.menu')!;

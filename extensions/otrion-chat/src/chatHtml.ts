@@ -34,8 +34,10 @@ export function chatHtml(web: vscode.Webview, media: vscode.Uri, scripts: vscode
 	<div id="agent-drop" hidden><span>Drop to add to agent</span></div>
 	<footer hidden>
 		<div id="status" role="status"></div>
-		<button type="button" id="retry-connection" hidden>Retry connection</button>
-		<div id="setup" hidden><span id="setup-text"></span><button id="configure" type="button"></button></div>
+		<section id="setup" aria-labelledby="setup-title" hidden>
+			<div role="status"><strong id="setup-title"></strong><p id="setup-text"></p></div>
+			<div class="setup-actions"><button id="configure" type="button"></button><button type="button" id="retry-connection" hidden>Retry connection</button></div>
+		</section>
 		<section id="model-panel" tabindex="-1" class="popover" aria-label="Model settings" hidden>
 			<h2>Model</h2>
 			<div id="model-options"></div>
