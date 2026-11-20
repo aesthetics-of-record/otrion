@@ -23,6 +23,10 @@ Run `pnpm run build-fast` for incremental development builds or `pnpm run compil
 
 On the first desktop launch, Otrion starts in Otrion Dark and opens a theme guide with screenshots of the editor. Select any theme card to apply it immediately. Switch between cards to compare themes, then select **Done** to close the guide. Later launches open directly in the editor. To reopen the guide, run **Otrion: Open Theme Guide** from the Command Palette. Use **Preferences: Color Theme** to change the selection later. The product disables core telemetry in development and packaged builds, turns off automatic crash reporting and experiments, and ships without the built-in Copilot Chat extension. The `defaultChatAgent.enabled` switch in `product.json` controls the bundled provider. The authentication API remains available to extensions that need a user-selected account. Third-party extensions can make their own network requests.
 
+## Release packages
+
+Run `bash scripts/otrion/package-release.sh` after installing dependencies on the target OS and CPU. The script writes native packages to `dist/v0.1.0/`. Windows produces a per-user installer, macOS a ZIP with an ad hoc signed application, and Linux a tar archive. Every target also produces a Remote SSH server archive named `otrion-reh-<os>-<arch>.tar.gz`. The release workflow builds `win32`, `darwin`, and `linux` packages for both `x64` and `arm64`. Download its artifacts and extract the outer Actions ZIP before attaching the twelve files to the `v0.1.0` GitHub release. Use the exact build commit as the tag target. The release version is tracked separately from the VS Code extension API version.
+
 ## Remote SSH
 
 Otrion Desktop bundles Open Remote - SSH. In the Command Palette, run `Remote-SSH: Connect to Host...` and select an SSH host or enter `user@host`. The extension reads your SSH configuration. Edit the built-in extension under `extensions/open-remote-ssh/`. Run `pnpm run gulp compile-extension:open-remote-ssh` from the repository root and reload the development window to try a change. The desktop build bundles the extension from the same sources. [Source layout and upstream revision](../../extensions/open-remote-ssh/README.md)
@@ -38,7 +42,7 @@ pnpm run gulp vscode-reh-linux-x64-min
 tar -czf otrion-reh-linux-x64.tar.gz -C .. vscode-reh-linux-x64
 ```
 
-Attach the archive to an Otrion GitHub release tagged `ssh-<full-desktop-commit>`. Keep the top-level directory in the archive because the installer strips it when extracting. For private builds, set `remote.SSH.serverDownloadUrlTemplate` in User Settings to your own artifact endpoint. The remote installation uses `~/.otrion-server`. Open Remote - SSH keeps its default strict commit validation.
+Attach the archive to an Otrion GitHub release tagged `v0.1.0` alongside the desktop downloads. Keep the top-level directory in the archive because the installer strips it when extracting. For private builds, set `remote.SSH.serverDownloadUrlTemplate` in User Settings to your own artifact endpoint. The remote installation uses `~/.otrion-server`. Open Remote - SSH keeps its default strict commit validation.
 
 ## Set up Codex and Claude Code
 

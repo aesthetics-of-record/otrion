@@ -147,8 +147,11 @@ export function parseKernelName(stdout: string): Platform {
     }
 }
 
+// Query the machine environment so an emulated SSH shell still reports the host CPU.
+export const windowsArchCommand = `powershell.exe -NoProfile -NonInteractive -Command "[Environment]::GetEnvironmentVariable('PROCESSOR_ARCHITECTURE', 'Machine')"`;
+
 export function parseMachineArch(stdout: string): Architecture {
-    switch (stdout) {
+    switch (stdout.toLowerCase()) {
         case 'x86_64':
         case 'amd64':
             return 'x64';
@@ -211,7 +214,8 @@ export async function detectPlatform(conn: Pick<SSHClient, 'exec'>, platform: Re
     let detectedArch: Architecture;
 
     if (detectedPlatform === 'windows') {
-        detectedArch = 'x64';
+        const result = await conn.exec(windowsArchCommand);
+        detectedArch = parseMachineArch(result.stdout.trim());
     } else {
         const result = await conn.exec('echo "==$(uname -m)=="');
         const uname = /==\s*(.+?)\s*==/.exec(result.stdout);
@@ -438,14 +442,14 @@ export function generateBashInstallScript({ id, quality, version, commit, releas
     }, extensionPath);
 }
 
-export function generatePowerShellInstallScript({ id, quality, version, commit, release, extensionIds, envVariables, sendEnvVars, useSocketPath, serverApplicationName, serverDataFolderName, serverDownloadUrlTemplate, customInstallPath, serverValidation, localServerDownload }: ServerInstallOptions, extensionPath: string): string {
+export function generatePowerShellInstallScript({ id, quality, version, commit, release, extensionIds, envVariables, sendEnvVars, useSocketPath, serverApplicationName, serverDataFolderName, serverDownloadUrlTemplate, customInstallPath, serverValidation, serverArch, localServerDownload }: ServerInstallOptions, extensionPath: string): string {
     const extensions = extensionIds.map(extId => '--install-extension ' + extId).join(' ');
     const downloadUrl = serverDownloadUrlTemplate
         .replace(/\$\{quality\}/g, quality)
         .replace(/\$\{version\}/g, version)
         .replace(/\$\{commit\}/g, commit)
         .replace(/\$\{os\}/g, 'win32')
-        .replace(/\$\{arch\}/g, 'x64')
+        .replace(/\$\{arch\}/g, serverArch)
         .replace(/\$\{release\}/g, release ?? '');
     const serverDataDir = customInstallPath
         ? customInstallPath.replace(/^~(?=[\\/]|$)/, '$(Resolve-Path ~)')
@@ -468,6 +472,7 @@ export function generatePowerShellInstallScript({ id, quality, version, commit, 
         SERVER_DATA_DIR_FLAG: customInstallPath ? '--server-data-dir=""$SERVER_DATA_DIR""' : '',
         SERVER_VALIDATION_FLAG: serverValidation === 'skip' ? '--disable-client-validation' : '',
         SERVER_DOWNLOAD_URL: downloadUrl,
+        SERVER_ARCH: serverArch,
         SCRIPT_ID: id,
         ENV_VAR_LINES: envVarLines,
         SEND_ENV_VAR_LINES: sendEnvVarLines,
