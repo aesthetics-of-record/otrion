@@ -25,10 +25,17 @@ export function chatHtml(web: vscode.Webview, media: vscode.Uri, scripts: vscode
 			<img src="${resource(media, 'orbit.svg')}" alt="">
 			<h1 id="welcome-title"></h1>
 			<div id="home" hidden>
-				<button id="home-new" aria-controls="session-menu" aria-expanded="false" type="button"><span aria-hidden="true">＋</span> New chat</button>
-				<h2>Recent conversations</h2>
-				<div id="recent-list"></div>
-				<p id="recent-status" role="status"></p>
+				<div id="home-setup" hidden>
+					<p id="home-instruction"></p>
+					<button id="home-settings" type="button">Open Otrion Settings <span aria-hidden="true">→</span></button>
+				</div>
+				<div id="home-sessions" hidden>
+					<button id="home-new" aria-controls="session-menu" aria-expanded="false" type="button"><span aria-hidden="true">＋</span> New chat</button>
+					<h2>Recent conversations</h2>
+					<div id="recent-list"></div>
+					<p id="recent-status" role="status"></p>
+					<button id="recent-settings" class="agent-settings-link" type="button" hidden>Open agent settings</button>
+				</div>
 			</div>
 		</section>
 		<section id="messages" aria-label="Conversation messages"></section>
@@ -38,6 +45,7 @@ export function chatHtml(web: vscode.Webview, media: vscode.Uri, scripts: vscode
 		<input id="history-search" type="search" aria-label="Filter session history" placeholder="Find a session…" hidden>
 		<div id="session-choices" class="menu-choices"></div>
 		<p id="history-status" role="status"></p>
+		<button id="history-settings" class="agent-settings-link" type="button" hidden>Open agent settings</button>
 		<p id="no-matches" hidden>No sessions found.</p>
 	</section>
 	<div id="agent-drop" hidden><span>Drop to add to agent</span></div>

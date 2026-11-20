@@ -16,7 +16,9 @@ const md = new MarkdownIt({
 });
 
 md.validateLink = href => !href.startsWith('//')
-	&& (!/^[a-z][a-z0-9+.-]*:/i.test(href) || /^(?:https?:\/\/|file:\/\/\/|mailto:)/i.test(href));
+	&& (!/^[a-z][a-z0-9+.-]*:/i.test(href)
+		|| /^(?:https?:\/\/|file:\/\/\/|vscode-remote:\/\/|mailto:|[a-z]:[\\/])/i.test(href)
+		|| /^[\w.-]+\.[\w-]+:\d+(?::\d+)?$/.test(href));
 
 // Fetch remote images only after the reader chooses to display them.
 md.renderer.rules.image = (tokens, index) => {

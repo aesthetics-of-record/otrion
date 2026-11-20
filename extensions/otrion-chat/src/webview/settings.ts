@@ -4,10 +4,29 @@
 	const host = acquireVsCodeApi();
 	const sections = Array.from(document.querySelectorAll<HTMLElement>('.agents section'));
 	const search = document.querySelector<HTMLInputElement>('#search')!;
+	const navigation = document.querySelectorAll<HTMLButtonElement>('nav button[aria-controls]');
+	function showPage(id: string) {
+		for (const button of navigation) {
+			const target = button.getAttribute('aria-controls')!;
+			const active = target === id;
+			document.getElementById(target)!.hidden = !active;
+			button.setAttribute('aria-current', active ? 'page' : 'false');
+		}
+	}
+	for (const button of navigation) {
+		button.addEventListener('click', () => {
+			if (button.getAttribute('aria-current') === 'page') { return; }
+			const id = button.getAttribute('aria-controls')!;
+			showPage(id);
+			host.postMessage({ action: 'navigate', page: id === 'page-agents' ? 'agents' : 'general' });
+		});
+	}
+
 	search.addEventListener('input', () => {
 		const term = search.value.trim().toLowerCase();
 		for (const section of sections) {
-			section.hidden = !section.querySelector('.agent-info')!.textContent.toLowerCase().includes(term);
+			const keywords = section.querySelector('.agent-info')!.textContent + ' ' + section.dataset.provider;
+			section.hidden = !keywords.toLowerCase().includes(term);
 			if (section.hidden) { section.querySelector<HTMLElement>('.menu')!.hidePopover(); }
 		}
 		document.getElementById('empty')!.hidden = sections.some(section => !section.hidden);
@@ -38,12 +57,13 @@
 	reload.addEventListener('click', () => host.postMessage({ action: 'reload' }));
 	window.addEventListener('message', ({ data }) => {
 		if (data.focusAgent) {
-			const target = sections.find(section => section.id === data.focusAgent);
+			showPage('page-agents');
+			const target = data.focusAgent === 'agents' ? search : sections.find(section => section.id === data.focusAgent);
 			if (target) {
 				if (target.hidden) { search.value = ''; search.dispatchEvent(new Event('input')); }
 				target.focus({ preventScroll: true });
 				target.scrollIntoView({ block: 'nearest' });
-				host.postMessage({ action: 'focusedAgent', id: target.id });
+				host.postMessage({ action: 'focusedAgent', id: data.focusAgent });
 			}
 		}
 		if (data.gallery) {
@@ -75,10 +95,8 @@
 					if (action === 'replaceKey') { button.textContent = row.hasKey ? 'Replace key' : 'Add key'; }
 				}
 			}
-			section.querySelector('.auth-note')!.textContent = byok
-				? 'Uses your ' + (row.id === 'codex' ? 'OpenAI' : 'Anthropic') + ' API billing from the next request.'
-				: data.remote ? 'Uses the CLI account on this host.' : 'Uses the credentials configured in your local CLI.';
-			auth.textContent = byok ? (row.hasKey ? 'API key saved' : 'API key required') : row.auth === 'Unknown' ? 'Login status unavailable' : row.auth ?? (row.source ? 'Enable to check sign-in' : '');
+			section.querySelector<HTMLElement>('.auth-note')!.hidden = !byok;
+			auth.textContent = byok ? (row.hasKey ? 'API key saved' : 'API key required') : row.auth === 'Unknown' ? 'Login status unavailable' : row.auth ?? '';
 			auth.classList.toggle('signed-in', byok ? row.hasKey : row.auth === 'Signed in');
 			primary.hidden = enabled;
 			primary.dataset.action = row.source ? 'enable' : 'install';

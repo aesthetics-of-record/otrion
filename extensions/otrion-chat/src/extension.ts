@@ -2,7 +2,7 @@
 
 import * as vscode from 'vscode';
 import { randomUUID } from 'node:crypto';
-import { agents, AgentStore, allowed, isAgent, type AgentId } from './agents';
+import { agents, agentLocation, AgentStore, allowed, isAgent, type AgentId } from './agents';
 import { SessionHistory } from './history';
 import { registerSettings } from './settings';
 import { chatHtml } from './chatHtml';
@@ -28,6 +28,7 @@ export function activate(context: vscode.ExtensionContext) {
 	let active = '';
 	let setupTab: string | undefined;
 	registerSettings(context, store, agent => {
+		if (!active) { void refreshHome(); }
 		if (setupTab && records.get(setupTab)?.agent === agent) { tabs.get(setupTab)?.retrySetup(); }
 	});
 	let view: vscode.WebviewView | undefined;
@@ -36,17 +37,47 @@ export function activate(context: vscode.ExtensionContext) {
 	let ready = false;
 	let restoreDrafts = true;
 
+	let homeRevision = 0;
+
+	async function agentChoices() {
+		const adapters = await Promise.all((Object.keys(agents) as AgentId[]).map(async id => ({
+			id, installed: !!await store.launch(id), enabled: allowed(id)
+		})));
+		return {
+			available: adapters.filter(adapter => adapter.installed && adapter.enabled),
+			installed: adapters.some(adapter => adapter.installed)
+		};
+	}
+
+	async function refreshHome() {
+		if (!ready || active || !view) { return; }
+		const current = view;
+		const revision = ++homeRevision;
+		const { available, installed } = await agentChoices();
+		if (current !== view || active || revision !== homeRevision) { return; }
+		await current.webview.postMessage({
+			type: 'empty', needsSetup: !available.length, installed, location: agentLocation()
+		});
+	}
+
 	function empty() {
 		active = '';
 		save();
-		void view?.webview.postMessage({ type: 'empty' });
+		return refreshHome();
 	}
 
-	function presentMenu() {
+	async function presentMenu() {
 		if (!ready || !view || !pendingMenu) { return; }
-		const { menu, home } = pendingMenu;
+		const request = pendingMenu;
+		const current = view;
+		const { menu, home } = request;
+		const items = menu === 'new' ? (await agentChoices()).available.map(({ id }) => ({ id, label: agents[id].name })) : [];
+		if (pendingMenu !== request || view !== current) { return; }
 		pendingMenu = undefined;
-		const items = menu === 'new' ? (Object.keys(agents) as AgentId[]).map(id => ({ id, label: agents[id].name })) : [];
+		if (menu === 'new' && !items.length) {
+			await vscode.commands.executeCommand('otrion.settings.open', 'agents');
+			return;
+		}
 		void view.webview.postMessage({ type: 'sessionMenu', menu, items, home });
 	}
 
@@ -158,8 +189,7 @@ export function activate(context: vscode.ExtensionContext) {
 						}
 					}
 				}
-				if (tab) { tab.snapshot(); } else { empty(); }
-				presentMenu();
+				if (tab) { tab.snapshot(); void presentMenu(); } else { void empty().then(presentMenu); }
 				return;
 			}
 			if (!editorId && message?.type === 'endHistory') { history.dispose(); return; }
@@ -168,15 +198,21 @@ export function activate(context: vscode.ExtensionContext) {
 			if (!editorId && message.type === 'chooseAgent') { void requestMenu('new', !active); return; }
 			if (!editorId && message.type === 'listHistory') {
 				const source = message.home && !active ? recent : history;
-				void source.refresh(status => {
+				void source.refresh((status, settingsTarget) => {
 					const items = [...source.entries.entries()]
 						.sort(([, a], [, b]) => (Date.parse(b.updatedAt ?? '') || 0) - (Date.parse(a.updatedAt ?? '') || 0))
 						.map(([id, info]) => ({ id, label: info.title || info.sessionId, detail: agents[info.agent].name, cwd: info.cwd }));
-					void webview.postMessage({ type: 'historyPage', request: message.request, home: source === recent, items: source === recent ? items.slice(0, 5) : items, status });
+					void webview.postMessage({ type: 'historyPage', request: message.request, home: source === recent, items: source === recent ? items.slice(0, 5) : items, status, settingsTarget });
 				});
 				return;
 			}
 			if (!editorId && message.type === 'openHistory') { openHistory(message.id, message.home ? recent : history); history.dispose(); return; }
+			if (message.type === 'settings') {
+				const target = isAgent(message.target) || message.target === 'agents' ? message.target : records.get(current)?.agent ?? 'agents';
+				setupTab = tab && target === records.get(current)?.agent ? current : undefined;
+				void vscode.commands.executeCommand('otrion.settings.open', target);
+				return;
+			}
 			if (!tab) { return; }
 			switch (message?.type) {
 				case 'fileIcon':
@@ -203,10 +239,6 @@ export function activate(context: vscode.ExtensionContext) {
 					break;
 				case 'copyCode':
 					if (typeof message.text === 'string') { void vscode.env.clipboard.writeText(message.text); }
-					break;
-				case 'settings':
-					setupTab = current;
-					void vscode.commands.executeCommand('otrion.settings.open', records.get(current)?.agent);
 					break;
 				case 'options': void tab.configure(); break;
 				case 'setOption': void tab.configure({ id: message.id, value: message.value }); break;
@@ -301,7 +333,9 @@ export function activate(context: vscode.ExtensionContext) {
 			view = resolved;
 			ready = false;
 			const listener = bindWebview(resolved.webview);
+			const visibility = resolved.onDidChangeVisibility(() => { if (resolved.visible) { void refreshHome(); } });
 			resolved.onDidDispose(() => {
+				visibility.dispose();
 				listener.dispose();
 				if (view === resolved) {
 					history.dispose();

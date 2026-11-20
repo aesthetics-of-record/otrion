@@ -19,17 +19,18 @@ export class SessionHistory {
 		this.entries.clear();
 	}
 
-	async refresh(publish: (status: string) => void) {
+	async refresh(publish: (status: string, settingsTarget?: AgentId | 'agents') => void) {
 		this.dispose();
 		const generation = this.generation;
 		if (!vscode.workspace.isTrusted) { publish('Trust this workspace to view agent sessions.'); return; }
 		const enabled = (Object.keys(agents) as AgentId[]).filter(allowed);
-		if (!enabled.length) { publish('Allow an agent in Otrion Settings to view its sessions.'); return; }
-		const errors: string[] = [];
+		if (!enabled.length) { publish('Enable an agent to view its sessions.', 'agents'); return; }
+		const errors = new Map<AgentId, string>();
 		let remaining = enabled.length;
 		const update = () => {
 			if (generation === this.generation) {
-				publish([remaining ? 'Loading sessions…' : '', ...errors].filter(Boolean).join('\n'));
+				publish([remaining ? 'Loading sessions…' : '', ...errors.values()].filter(Boolean).join('\n'),
+					errors.size > 1 ? 'agents' : errors.keys().next().value);
 			}
 		};
 		await Promise.all(enabled.map(async agent => {
@@ -51,7 +52,7 @@ export class SessionHistory {
 					update();
 				});
 			} catch (error) {
-				errors.push(agents[agent].name + ' · ' + error.message);
+				errors.set(agent, agents[agent].name + ' · ' + error.message);
 			} finally {
 				if (client) { this.clients.delete(client); client.dispose(); }
 				remaining--;

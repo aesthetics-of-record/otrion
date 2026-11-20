@@ -54,12 +54,13 @@ export function createWorkbenchDialogOptions(
 
 export function createBrowserAboutDialogDetails(productService: IProductService): { title: string; details: string; detailsToCopy: string } {
 	const detailString = (useAgo: boolean): string => {
-		return localize('aboutDetail',
-			"Version: {0}\nCommit: {1}\nDate: {2}\nBrowser: {3}",
-			productService.version || 'Unknown',
+		return localize('otrionAboutDetail',
+			"Version: {0}\nVS Code Version: {4}\nCommit: {1}\nDate: {2}\nBrowser: {3}",
+			productService.otrionVersion ?? productService.version,
 			productService.commit || 'Unknown',
 			productService.date ? `${productService.date}${useAgo ? ' (' + fromNow(new Date(productService.date), true) + ')' : ''}` : 'Unknown',
-			navigator.userAgent
+			navigator.userAgent,
+			productService.version
 		);
 	};
 

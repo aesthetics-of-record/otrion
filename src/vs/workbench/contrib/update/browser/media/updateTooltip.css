@@ -144,6 +144,7 @@
 }
 
 .update-tooltip .state-message {
+	overflow-wrap: anywhere;
 	display: flex;
 	align-items: flex-start;
 	font-size: var(--vscode-bodyFontSize);

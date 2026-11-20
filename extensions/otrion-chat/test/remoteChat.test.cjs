@@ -23,18 +23,23 @@ test('Remote SSH agents use the host runtime, credentials and file paths', async
 	const envPath = process.env.PATH;
 	const uri = { scheme: 'file', fsPath: workspace };
 	let terminal;
+	let opened;
 	const mock = {
 		env: { remoteAuthority: 'ssh-remote+test', remoteName: 'ssh-remote' },
 		workspace: {
 			isTrusted: true,
 			workspaceFolders: [{ uri }],
+			openTextDocument: async uri => ({ uri, lineCount: 20, validatePosition: p => p }),
 			getConfiguration: () => ({ get: (_, fallback) => fallback }),
 		},
 		Uri: {
 			parse: () => ({ scheme: 'file', fsPath: attached }),
 			file: fsPath => ({ scheme: 'file', fsPath }),
 		},
+		Position: class { constructor(line, character) { Object.assign(this, { line, character }); } },
+		Range: class { constructor(start, end) { Object.assign(this, { start, end }); } },
 		window: {
+			showTextDocument: (doc, options) => { opened = { doc, ...options.selection.start }; },
 			createTerminal: options => { terminal = options; return { show() {} }; },
 		},
 	};
@@ -46,7 +51,7 @@ test('Remote SSH agents use the host runtime, credentials and file paths', async
 		},
 		load(url, context, next) {
 			return url === 'otrion-test:vscode'
-				? { format: 'module', source: 'export const { env, workspace, Uri, window } = globalThis.__otrionTestVscode;', shortCircuit: true }
+				? { format: 'module', source: 'export const { env, workspace, Uri, window, Position, Range } = globalThis.__otrionTestVscode;', shortCircuit: true }
 				: next(url, context);
 		},
 	});
@@ -99,6 +104,16 @@ test('Remote SSH agents use the host runtime, credentials and file paths', async
 			const states = [];
 			const session = createSession(context, { ...runtime, launch: id => available ? runtime.launch(id) : undefined }, record, msg => states.push(msg), () => {});
 			try {
+				for (const [href, line, character] of [
+					[path.join(workspace, 'server.ts') + ':11', 10, 0],
+					['server.ts%3A11%3A3', 10, 2],
+					['server.ts#L7-L10', 6, 0],
+				]) {
+					await session.openLink(href, false);
+					assert.equal(opened.doc.uri.fsPath, path.join(workspace, 'server.ts'));
+					assert.equal(opened.line, line);
+					assert.equal(opened.character, character);
+				}
 				await session.configure();
 				assert.equal(states.at(-1).connectionIssue, 'setup');
 				assert.match(states.at(-1).status, /SSH host/);
