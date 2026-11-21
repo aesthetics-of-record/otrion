@@ -79,10 +79,6 @@ export class ArchiveUpdateService extends AbstractUpdateService {
 
 				if (!update || !update.url || !update.version || !update.productVersion) {
 					this.setState(State.Idle(UpdateType.Archive, undefined, explicit || undefined));
-				} else if (this.linuxRoot && update.sha256hash) {
-					if (!this.deferAutomaticDownload(update, explicit)) {
-						this.startDownload(update, explicit);
-					}
 				} else {
 					this.setState(State.AvailableForDownload(update));
 				}

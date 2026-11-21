@@ -91,7 +91,7 @@ export class Win32UpdateService extends AbstractUpdateService implements IRelaun
 		@IApplicationStorageMainService applicationStorageMainService: IApplicationStorageMainService,
 		@IMeteredConnectionService meteredConnectionService: IMeteredConnectionService,
 	) {
-		super(lifecycleMainService, configurationService, environmentMainService, requestService, logService, productService, telemetryService, applicationStorageMainService, meteredConnectionService, true);
+		super(lifecycleMainService, configurationService, environmentMainService, requestService, logService, productService, telemetryService, applicationStorageMainService, meteredConnectionService, !productService.otrionUpdateRepository);
 
 		this.readyMutexName = `${productService.win32MutexName}-ready`;
 		this.updatingMutexName = `${productService.win32MutexName}-updating`;
@@ -233,6 +233,10 @@ export class Win32UpdateService extends AbstractUpdateService implements IRelaun
 			return;
 		}
 
+		this.runUpdateRequest(explicit, url, pendingCommit);
+	}
+
+	private runUpdateRequest(explicit: boolean, feedOrUpdate: string | IUpdate, pendingCommit?: string): void {
 		// Only set CheckingForUpdates if we're not already in Overwriting state
 		if (this.state.type !== StateType.Overwriting) {
 			this.setState(State.CheckingForUpdates(explicit));
@@ -243,7 +247,12 @@ export class Win32UpdateService extends AbstractUpdateService implements IRelaun
 		const cts = this.checkCancellationTokenSource = new CancellationTokenSource();
 		const token = cts.token;
 
-		const promise = this.fetchUpdate(url, 'updateService.win32.checkForUpdates', token, pendingCommit)
+		const checkingFeed = typeof feedOrUpdate === 'string';
+		const release = checkingFeed
+			? this.fetchUpdate(feedOrUpdate, 'updateService.win32.checkForUpdates', token, pendingCommit)
+			: Promise.resolve(feedOrUpdate);
+
+		const promise = release
 			.then(update => {
 				const updateType = this.getUpdateType();
 
@@ -263,7 +272,7 @@ export class Win32UpdateService extends AbstractUpdateService implements IRelaun
 					return Promise.resolve(null);
 				}
 
-				if (updateType === UpdateType.Archive || (this.githubReleaseUrl && this.productService.target !== 'user')) {
+				if (updateType === UpdateType.Archive || (this.githubReleaseUrl && checkingFeed)) {
 					this.setState(State.AvailableForDownload(update));
 					return Promise.resolve(null);
 				}
@@ -381,9 +390,9 @@ export class Win32UpdateService extends AbstractUpdateService implements IRelaun
 	}
 
 	protected override async doDownloadUpdate(state: AvailableForDownload): Promise<void> {
-		if (this.githubReleaseUrl && this.productService.target === 'user') {
-			this.setState(State.Idle(this.getUpdateType()));
-			return this.checkForUpdates(true);
+		if (this.githubReleaseUrl && this.productService.target === 'user' && this.getUpdateType() === UpdateType.Setup) {
+			this.runUpdateRequest(true, state.update);
+			return;
 		}
 		if (state.update.url) {
 			this.nativeHostMainService.openExternal(undefined, state.update.url);

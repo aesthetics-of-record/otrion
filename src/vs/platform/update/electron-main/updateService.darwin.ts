@@ -129,16 +129,16 @@ export class DarwinUpdateService extends AbstractUpdateService implements IRelau
 			return;
 		}
 
-		const autoDownload = explicit || !this.meteredConnectionService.isConnectionMetered;
-		if (this.githubReleaseUrl || !autoDownload) {
-			void this.checkUpdateFeed(this.githubReleaseUrl ?? url, autoDownload, pendingCommit);
+		const autoDownload = !this.githubReleaseUrl && (explicit || !this.meteredConnectionService.isConnectionMetered);
+		if (!autoDownload) {
+			void this.checkUpdateFeed(this.githubReleaseUrl ?? url, pendingCommit);
 			return;
 		}
 
 		electron.autoUpdater.checkForUpdates();
 	}
 
-	private async checkUpdateFeed(url: string, autoDownload: boolean, pendingVersion?: string): Promise<void> {
+	private async checkUpdateFeed(url: string, pendingVersion?: string): Promise<void> {
 		const checking = this.state;
 		try {
 			const update = await this.fetchUpdate(url, 'updateService.darwin.checkForUpdates', CancellationToken.None, pendingVersion);
@@ -151,11 +151,7 @@ export class DarwinUpdateService extends AbstractUpdateService implements IRelau
 				this.setState(State.Idle(UpdateType.Archive, undefined, notAvailable || undefined));
 			} else {
 				this.logService.trace('update#checkUpdateFeed - update available', { version: update.version, productVersion: update.productVersion });
-				if (autoDownload) {
-					electron.autoUpdater.checkForUpdates();
-				} else {
-					this.setState(State.AvailableForDownload(update));
-				}
+				this.setState(State.AvailableForDownload(update));
 			}
 		} catch (err) {
 			this.logService.error('update#checkUpdateFeed - failed to check for update', err);
