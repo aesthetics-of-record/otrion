@@ -1,11 +1,12 @@
 /* Copyright (c) Otrion contributors. Licensed under the MIT License. */
 
 import { randomBytes } from 'node:crypto';
-import { readFileSync } from 'node:fs';
+import { readFile } from 'node:fs/promises';
 import * as vscode from 'vscode';
-import { agents, agentLocation, AgentStore, allowed, isAgent, type AgentId } from './agents';
+import { agents, agentLocation, AgentStore, allowed, configuredPath, installIssue, isAgent, setAllowed, supportsKey, type AgentId } from './agents';
+import { agentIds } from './agentCatalog';
 
-export function registerSettings(context: vscode.ExtensionContext, store: AgentStore, installedAgent: (id: AgentId) => void) {
+export function registerSettings(context: vscode.ExtensionContext, store: AgentStore, onSetup: (id: AgentId) => void) {
 	const remote = !!vscode.env.remoteAuthority;
 	let panel: vscode.WebviewPanel | undefined;
 	let currentPage: 'general' | 'agents' = 'general';
@@ -14,21 +15,23 @@ export function registerSettings(context: vscode.ExtensionContext, store: AgentS
 	const changingAuth = new Set<AgentId>();
 	const errors = new Map<AgentId, string>();
 	let revision = 0;
+	let enableChange = Promise.resolve();
 
-	async function refresh() {
+	async function refresh(ids = agentIds) {
 		const current = panel;
 		if (!current || currentPage !== 'agents') { return; }
 		const sequence = ++revision;
-		const rows = await Promise.all((Object.keys(agents) as AgentId[]).map(async id => {
+		const rows = await Promise.all(ids.map(async id => {
 			const [launch, installed] = await Promise.all([store.launch(id), store.isInstalled(id)]);
-			const setting = vscode.workspace.getConfiguration('otrion.chat').get<string>(id + 'AcpPath');
+			const setting = configuredPath(id);
 			const missingRuntime = 'Install Node.js and restart Otrion.';
-			const missing = setting && setting !== agents[id].binary ? 'Check otrion.chat.' + id + 'AcpPath in Editor Settings.' : installed ? missingRuntime : 'Not installed';
+			const missing = setting && setting !== agents[id].binary ? 'Check the configured executable: ' + setting : installed ? missingRuntime : 'Not installed';
 			const choice = await store.authChoice(id);
 			const auth = choice.mode === 'cli' && launch && allowed(id) ? await store.authStatus(id, launch) : undefined;
-			return { id, auth, ...choice, installed, source: launch?.source, availability: launch?.source ?? missing, allowed: allowed(id), installing: installing.has(id), error: errors.get(id) };
+			const authenticated = auth === 'Signed in';
+			return { id, auth, authenticated, ...choice, installed, source: launch?.source, availability: launch?.source ?? missing, installIssue: installIssue(id), allowed: allowed(id), installing: installing.has(id), signingIn: changingAuth.has(id), error: errors.get(id) };
 		}));
-		if (panel === current && sequence === revision) {
+		if (panel === current && currentPage === 'agents' && sequence === revision) {
 			await current.webview.postMessage({ rows, remote, location: agentLocation() });
 		}
 	}
@@ -44,11 +47,25 @@ export function registerSettings(context: vscode.ExtensionContext, store: AgentS
 				if (installing.has(id)) { return; }
 				installing.add(id);
 				void refresh();
-				try { await store.install(id); installedAgent(id); } finally { installing.delete(id); }
+				try {
+					await store.install(id);
+					onSetup(id);
+				} finally { installing.delete(id); }
 			} else if (action === 'allow' && typeof value === 'boolean') {
-				await vscode.workspace.getConfiguration('otrion.chat').update(id + 'Allowed', value, vscode.ConfigurationTarget.Global);
+				const change = enableChange.then(() => setAllowed(id, value));
+				enableChange = change.catch(() => {});
+				await change;
 			} else if (action === 'login') {
-				await store.signIn(id);
+				if (changingAuth.has(id)) { return; }
+				changingAuth.add(id);
+				void refresh();
+				try {
+					const result = await store.signIn(id);
+					if (result === true) { onSetup(id); }
+					else if (result && result.exitStatus?.code === 0) { onSetup(id); }
+				} finally { changingAuth.delete(id); }
+			} else if (action === 'guide') {
+				await vscode.env.openExternal(vscode.Uri.parse(agents[id].website));
 			}
 		} catch (error) {
 			errors.set(id, error.message);
@@ -56,13 +73,11 @@ export function registerSettings(context: vscode.ExtensionContext, store: AgentS
 		await refresh();
 	}
 
-	context.subscriptions.push(store.onAuthChange(() => { void refresh(); }), vscode.window.onDidCloseTerminal(t => {
-		if (panel?.visible && Object.values(agents).some(agent => t.name === agent.name + ' Sign In')) { void refresh(); }
-	}), vscode.window.onDidChangeWindowState(state => {
+	context.subscriptions.push(store.onAuthChange(() => { void refresh(); }), vscode.window.onDidCloseTerminal(() => { void refresh(); }), vscode.window.onDidChangeWindowState(state => {
 		if (state.focused && panel?.visible) { void refresh(); }
 	}), vscode.workspace.onDidChangeConfiguration(e => {
 		if (e.affectsConfiguration('otrion.chat')) { void refresh(); }
-	}), vscode.commands.registerCommand('otrion.settings.open', (agent?: unknown) => {
+	}), vscode.commands.registerCommand('otrion.settings.open', async (agent?: unknown) => {
 		focusAgent = isAgent(agent) || agent === 'agents' ? agent : undefined;
 		if (focusAgent) { currentPage = 'agents'; }
 		else if (!panel) { currentPage = 'general'; }
@@ -72,13 +87,6 @@ export function registerSettings(context: vscode.ExtensionContext, store: AgentS
 			void refresh();
 			return;
 		}
-		// Read from the extension host's own installation so first paint needs no SSH resource requests.
-		const asset = (file: string) => readFileSync(context.asAbsolutePath(file), 'utf8');
-		const css = asset('media/settings.css');
-		const script = asset('out/webview/settings.js');
-		const nonce = randomBytes(16).toString('base64');
-		const iconUrl = (file: string) => 'url("data:image/svg+xml;base64,' + Buffer.from(asset('media/' + file + '.svg')).toString('base64') + '")';
-		const iconStyles = Object.keys(agents).map(id => '#' + id + ' .agent-icon { mask-image: ' + iconUrl(id) + '; }').join('\n');
 		panel = vscode.window.createWebviewPanel('otrion.settings', 'Otrion Settings', vscode.ViewColumn.Active, {
 			enableScripts: true, localResourceRoots: [], retainContextWhenHidden: true,
 		});
@@ -116,30 +124,46 @@ export function registerSettings(context: vscode.ExtensionContext, store: AgentS
 		});
 		panel.onDidChangeViewState(e => { if (e.webviewPanel.active) { void refresh(); } });
 		panel.onDidDispose(() => { listener.dispose(); panel = undefined; });
-		const cards = Object.entries(agents).map(([id, agent]) => `
-			<section id="${id}" data-provider="${id === 'codex' ? 'OpenAI' : 'Anthropic'}" tabindex="-1" aria-labelledby="${id}-name">
+		// Inline host-local assets so the webview also works over SSH.
+		const current = panel;
+		const asset = (file: string) => readFile(context.asAbsolutePath(file), 'utf8');
+		const iconUrl = async (name: string) => 'url("data:image/svg+xml;base64,' + Buffer.from(await asset('media/' + name + '.svg')).toString('base64') + '")';
+		const [css, script, orbit, agentIcons] = await Promise.all([
+			asset('media/settings.css'), asset('out/webview/settings.js'), iconUrl('orbit'),
+			Promise.all(agentIds.map(async id => '#' + id + ' .agent-icon { mask-image: ' + await iconUrl(id) + '; }')),
+		]);
+		if (panel !== current) { return; }
+		const nonce = randomBytes(16).toString('base64');
+		const cards = agentIds.map(id => {
+			const agent = agents[id];
+			const keySupported = supportsKey(id);
+			return `
+			<section id="${id}" data-provider="${agent.npm?.package ?? agent.binary}" tabindex="-1" aria-labelledby="${id}-name">
 				<span class="agent-icon" aria-hidden="true"></span>
 				<div class="agent-info">
-					<h3 id="${id}-name">${agent.name}</h3><span class="auth" role="status"></span>
+					<h3 id="${id}-name">${agent.name}</h3><p class="agent-description" title="${agent.description}">${agent.description}</p><span class="auth" role="status"></span>
 				</div>
 				<button class="primary" disabled>Checking…</button>
 				<span class="enabled" hidden>Enabled</span>
 				<button class="more" popovertarget="${id}-menu" aria-label="More actions for ${agent.name}" title="More actions" disabled>•••</button>
 				<div class="menu" id="${id}-menu" popover>
 					<button data-action="install">Install Otrion-managed adapter</button>
+					${keySupported ? '<button data-action="key">Set up API key</button>' : ''}
+					<button data-action="guide">Provider setup guide</button>
 					<button data-action="disable">Disable</button>
 				</div>
-				<div class="auth-options">
-					<div class="auth-method" role="group" aria-label="Authentication for ${agent.name}">
-						<button data-action="cli" title="Use the CLI account ${agentLocation()}" disabled>CLI account</button><button data-action="key" disabled>API key</button>
-					</div>
+				<div class="auth-options" hidden>
+					${keySupported ? `<div class="auth-method" role="group" aria-label="Authentication for ${agent.name}">
+						<button data-action="cli" title="Use the CLI configuration ${agentLocation()}" disabled>CLI account</button><button data-action="key" disabled>API key</button>
+					</div>` : ''}
 					<button class="auth-action" data-action="login" hidden>Sign in</button>
-					<button class="auth-action" data-action="replaceKey" hidden>Replace key</button>
+					${keySupported ? `<button class="auth-action" data-action="replaceKey" hidden>Replace key</button>
 					<button class="auth-action" data-action="removeKey" hidden>Remove key</button>
-					<p class="auth-note" hidden>Provider API billing applies.</p>
+					<p class="auth-note" hidden>Provider API billing applies.</p>` : ''}
 				</div>
 				<p class="error" role="alert"></p>
-			</section>`).join('');
+			</section>`;
+		}).join('');
 		const icon = (path: string) => `<svg aria-hidden="true" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="${path}"/></svg>`;
 		const navigation = [
 			{ page: 'general', label: 'General', symbol: 'M2 5h7m3 0h2M2 11h2m3 0h7M9 3.5h3v3H9zM4 9.5h3v3H4z' },
@@ -150,8 +174,8 @@ export function registerSettings(context: vscode.ExtensionContext, store: AgentS
 		web.html = `<!doctype html><html lang="en"><head><meta charset="utf-8">
 			<meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src data:; style-src 'nonce-${nonce}'; script-src 'nonce-${nonce}';">
 			<style nonce="${nonce}">${css}
-.brand-mark { mask-image: ${iconUrl('orbit')}; }
-${iconStyles}</style>
+.brand-mark { mask-image: ${orbit}; }
+${agentIcons.join('\n')}</style>
 			</head><body>
 			<nav aria-label="Otrion Settings"><div class="nav-title" title="Otrion Settings"><span class="brand-mark" aria-hidden="true"></span><span>Otrion Settings</span></div>${navigation}</nav>
 			<main><div id="page-general" ${currentPage === 'general' ? '' : 'hidden'}>
@@ -165,5 +189,5 @@ ${iconStyles}</style>
 			${remote ? `<p class="agent-host">${vscode.l10n.t('Agents run {0}.', agentLocation())}</p>` : ''}
 			<div class="catalog agent-catalog"><div class="agent-search">${icon('M11 11l3 3M12 7a5 5 0 1 1-10 0 5 5 0 1 1 10 0Z')}<input id="search" type="search" placeholder="Search agents…" aria-label="Search agents"></div>
 			<div class="agents">${cards}</div><p id="empty" hidden>No matching agents.</p></div></div></main><script nonce="${nonce}">${script}</script></body></html>`;
-	}), { dispose: () => panel?.dispose() });
+	}), { dispose: () => { panel?.dispose(); } });
 }

@@ -3,6 +3,7 @@
 import * as vscode from 'vscode';
 import { randomUUID } from 'node:crypto';
 import { agents, agentLocation, AgentStore, allowed, isAgent, type AgentId } from './agents';
+import { agentIds } from './agentCatalog';
 import { SessionHistory } from './history';
 import { registerSettings } from './settings';
 import { chatHtml } from './chatHtml';
@@ -16,6 +17,7 @@ export function activate(context: vscode.ExtensionContext) {
 	registerThemeGuide(context);
 	const history = new SessionHistory(context, store);
 	const recent = new SessionHistory(context, store);
+	let enabledAgents = new Set(agentIds.filter(allowed));
 	context.subscriptions.push(history, recent);
 	const key = 'chatSessions.v1';
 	const saved = context.workspaceState.get<{ records: SessionRecord[]; tabs: string[]; active: string }>(key);
@@ -40,7 +42,7 @@ export function activate(context: vscode.ExtensionContext) {
 	let homeRevision = 0;
 
 	async function agentChoices() {
-		const adapters = await Promise.all((Object.keys(agents) as AgentId[]).map(async id => ({
+		const adapters = await Promise.all(agentIds.map(async id => ({
 			id, installed: !!await store.launch(id), enabled: allowed(id)
 		})));
 		return {
@@ -109,13 +111,13 @@ export function activate(context: vscode.ExtensionContext) {
 			if (tabs.get(record.id) !== controller) { return; }
 			const panel = editors.get(record.id);
 			if (panel) { void panel.webview.postMessage(message); }
-			else if (active === record.id || ('type' in message && message.type === 'restoreDraft')) { void view?.webview.postMessage(message); }
+			else if (active === record.id || message.type === 'restoreDraft') { void view?.webview.postMessage(message); }
 		}, save);
 		tabs.set(record.id, controller);
 	}
 	function open(id: string) {
 		const record = records.get(id);
-		if (!record) { return; }
+		if (!record || !isAgent(record.agent)) { return; }
 		const panel = editors.get(id);
 		if (panel) { panel.reveal(); return; }
 		if (!tabs.has(id)) { mount(record); }
@@ -183,7 +185,7 @@ export function activate(context: vscode.ExtensionContext) {
 					restoreDrafts = false;
 					for (const id of saved?.tabs ?? []) {
 						const record = records.get(id);
-						if (record && initial[id]?.length && !tabs.has(id)) {
+						if (record && isAgent(record.agent) && initial[id]?.length && !tabs.has(id)) {
 							drafts.set(id, initial[id]);
 							mount(record);
 						}
@@ -301,24 +303,27 @@ export function activate(context: vscode.ExtensionContext) {
 		if (active) { void tabs.get(active)?.configure(); } else { empty(); }
 	}), vscode.workspace.onDidChangeConfiguration(e => {
 		if (!e.affectsConfiguration('otrion.chat')) { return; }
+		const previousEnabled = enabledAgents;
+		enabledAgents = new Set(agentIds.filter(allowed));
 		history.dispose();
 		void view?.webview.postMessage({ type: 'dismissHistory' });
 		for (const [id, tab] of tabs) {
-			if (!allowed(records.get(id)!.agent)) { tab.suspend(); }
+			const agent = records.get(id)!.agent;
+			if (!enabledAgents.has(agent)) { tab.suspend(); }
 			if (editors.has(id)) {
-				if (allowed(records.get(id)!.agent) && e.affectsConfiguration('otrion.chat.' + records.get(id)!.agent + 'Allowed')) { void tab.configure(); }
+				if (enabledAgents.has(agent) && !previousEnabled.has(agent)) { void tab.configure(); }
 				else { tab.snapshot(); }
 			}
 		}
 		const record = records.get(active);
-		if (record && allowed(record.agent) && e.affectsConfiguration('otrion.chat.' + record.agent + 'Allowed')) {
+		if (record && enabledAgents.has(record.agent) && !previousEnabled.has(record.agent)) {
 			void tabs.get(active)?.configure();
 		} else {
 			if (active) { tabs.get(active)?.snapshot(); } else { empty(); }
 		}
 	}), vscode.window.registerCustomEditorProvider('otrion.chat.session', {
 		openCustomDocument(uri) {
-			if (uri.scheme !== 'otrion-session' || !records.has(uri.path.slice(1))) { throw new Error('Chat session unavailable in this workspace.'); }
+			if (uri.scheme !== 'otrion-session' || !isAgent(records.get(uri.path.slice(1))?.agent)) { throw new Error('Chat session unavailable in this workspace.'); }
 			return { uri, dispose() {} };
 		},
 		resolveCustomEditor(document, panel) {

@@ -109,6 +109,20 @@
 					},
 					"description": "Extension marketplace endpoints. Reload the window after changing them."
 				},
+				"otrion.chat.enabledAgents": {
+					"type": "array",
+					"items": { "type": "string" },
+					"default": [],
+					"scope": "machine",
+					"description": "Additional ACP agents enabled in Otrion Settings on this host."
+				},
+				"otrion.chat.agentPaths": {
+					"type": "object",
+					"additionalProperties": { "type": "string" },
+					"default": {},
+					"scope": "machine",
+					"description": "Override an additional ACP agent executable by its catalog ID."
+				},
 				"otrion.chat.codexAcpPath": {
 					"type": "string",
 					"default": "codex-acp",

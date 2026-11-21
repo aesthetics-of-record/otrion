@@ -134,6 +134,8 @@ form:focus-within { border-color: var(--vscode-focusBorder); }
 #session-menu { position: fixed; inset: 4px 6px auto auto; width: min(235px, calc(100vw - 12px)); max-height: 60vh; margin: 0; padding: 8px; }
 #session-menu:has(#history-search:not([hidden])) { width: min(330px, calc(100vw - 12px)); }
 #session-choices button:has(small) { display: grid; justify-content: stretch; gap: 2px; }
+#session-choices button:has(.agent-icon) { justify-content: start; gap: 8px; }
+#session-choices .agent-icon { width: 16px; height: 16px; flex: none; background: currentColor; mask: center / contain no-repeat; }
 #session-choices button :is(span, small) { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 #session-choices small { margin-left: 0; }
 #history-status { white-space: pre-line; }

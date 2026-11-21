@@ -14,6 +14,71 @@ const { pathToFileURL } = require('node:url');
 const extension = path.resolve(process.env.OTRION_CHAT_TEST_EXTENSION ?? path.join(__dirname, '..'));
 const windows = process.platform === 'win32';
 
+test('Antigravity checks the native download and isolates Gemini key settings', async () => {
+	const { configureAntigravityKeyProfile, installAntigravity } = require(path.join(extension, 'out', 'antigravity.js'));
+	const home = await fs.mkdtemp(path.join(os.tmpdir(), 'otrion-agy-test-'));
+	try {
+		const defaultProfile = path.join(home, '.gemini', 'antigravity-cli');
+		await fs.mkdir(defaultProfile, { recursive: true });
+		await fs.writeFile(path.join(defaultProfile, 'settings.json'), '{"theme":"dark"}');
+		const [profile, same] = await Promise.all([configureAntigravityKeyProfile('store', home), configureAntigravityKeyProfile('store', home)]);
+		assert.equal(same, profile);
+		const settings = path.join(home, '.gemini', profile, 'settings.json');
+		assert.deepEqual(JSON.parse(await fs.readFile(settings, 'utf8')), { modelProvider: 'gemini' });
+		assert.equal(await fs.readFile(path.join(defaultProfile, 'settings.json'), 'utf8'), '{"theme":"dark"}');
+		await assert.rejects(installAntigravity(home, async url => {
+			assert.equal(new URL(url).hostname, 'storage.googleapis.com');
+			return new Response('incomplete binary');
+		}), /SHA-512/);
+		assert.equal((await fs.readdir(home)).includes(windows ? 'agy.exe' : 'agy'), false);
+	} finally { await fs.rm(home, { recursive: true, force: true }); }
+});
+
+test('ACP agents can offer legacy session options and protocol sign-in methods', async () => {
+	const { AcpClient, AuthenticationRequired } = require(path.join(extension, 'out', 'acp.js'));
+	const adapter = `
+		const assert = require('node:assert/strict');
+		let signedIn = false;
+		require('node:readline').createInterface({ input: process.stdin }).on('line', line => {
+			const { id, method, params } = JSON.parse(line);
+			let result = {};
+			let error;
+			if (method === 'initialize') {
+				const authMethods = [{ id: 'account', name: 'Sign in' }];
+				if (params.clientCapabilities.auth?.terminal) {
+					authMethods.push({ type: 'terminal', id: 'terminal', name: 'Terminal', args: ['--login'] });
+				}
+				result = { protocolVersion: 1, authMethods };
+			} else if (method === 'authenticate') {
+				assert.equal(params.methodId, 'account');
+				signedIn = true;
+			} else if (method === 'session/new') {
+				if (signedIn) {
+					result = { sessionId: 'legacy', modes: { currentModeId: 'plan', availableModes: [{ id: 'plan', name: 'Plan' }, { id: 'edit', name: 'Edit' }] },
+						models: { currentModelId: 'small', availableModels: [{ modelId: 'small', name: 'Small' }, { modelId: 'large', name: 'Large' }] } };
+				} else { error = { code: -32000, message: 'Authentication required' }; }
+			} else if (method === 'session/set_mode') {
+				assert.equal(params.modeId, 'edit');
+			} else if (method === 'session/set_model') {
+				assert.equal(params.modelId, 'large');
+			} else { throw new Error('Unexpected method ' + method); }
+			console.log(JSON.stringify({ jsonrpc: '2.0', id, ...(error ? { error } : { result }) }));
+		});`;
+	const updates = [];
+	const client = new AcpClient('opencode', process.execPath, ['-e', adapter], os.tmpdir(), {}, update => updates.push(update));
+	try {
+		await assert.rejects(client.initialize(os.tmpdir(), 'test'), AuthenticationRequired);
+		const methods = await client.authMethods('test');
+		assert.deepEqual(methods.map(method => method.id), ['account', 'terminal']);
+		await client.authenticate('account');
+		assert.equal(await client.initialize(os.tmpdir(), 'test'), 'legacy');
+		for (const option of updates.at(-1).configOptions) {
+			await client.setOption(option.id, option.options[1].value);
+		}
+		assert.deepEqual(updates.at(-1).configOptions.map(o => o.currentValue), ['edit', 'large']);
+	} finally { client.dispose(); }
+});
+
 test('Remote SSH agents use the host runtime, credentials and file paths', async () => {
 	const root = await fs.mkdtemp(path.join(os.tmpdir(), 'otrion remote chat '));
 	const workspace = path.join(root, 'Workspace #1');
@@ -61,12 +126,19 @@ test('Remote SSH agents use the host runtime, credentials and file paths', async
 		await fs.mkdir(bin);
 		process.env.PATH = [windows ? '"' + bin + '"' : bin, path.dirname(process.execPath), ...(windows ? [] : ['/usr/bin', '/bin'])].join(path.delimiter);
 		await fs.writeFile(attached, 'fixture');
-		const { AgentStore, agents } = require(path.join(extension, 'out', 'agents.js'));
+		const { AgentStore, agents, isAgent, allowed, installIssue, supportsKey } = require(path.join(extension, 'out', 'agents.js'));
 		const { createSession } = require(path.join(extension, 'out', 'chatSession.js'));
+		const credentials = new Map();
 		const store = new AgentStore(managed, { get: async key => {
 			assert.match(key, /^agent-auth\.remote\.ssh-remote\+test\./);
-			return undefined;
+			return credentials.get(key);
 		} });
+		assert.equal(isAgent('toString'), false);
+		assert.equal(isAgent('gemini'), false);
+		assert.equal(allowed('grok'), false);
+		assert.deepEqual(Object.keys(agents).filter(supportsKey).sort(), ['antigravity', 'claude', 'cline', 'codex', 'grok']);
+		credentials.set('agent-auth.remote.ssh-remote+test.opencode', JSON.stringify({ mode: 'key', key: 'old-key' }));
+		assert.deepEqual(await store.authChoice('opencode'), { mode: 'cli', hasKey: false });
 		const executable = `
 			const assert = require('node:assert/strict');
 			const fs = require('node:fs');
@@ -126,19 +198,29 @@ test('Remote SSH agents use the host runtime, credentials and file paths', async
 			});`;
 
 		// On Windows, exercise the npm-installed .cmd layout. On POSIX, exercise the PATH entry directly.
-		for (const [agent, { binary }] of Object.entries(agents)) {
+		for (const agent of ['codex', 'claude', 'grok', 'qwen-code', 'cline', 'github-copilot-cli']) {
+			const profile = agents[agent];
+			const binary = profile.binary;
+			const script = '#!/usr/bin/env node\n' +
+				'const { deepEqual } = require("node:assert/strict");\n' +
+				'deepEqual(process.argv.slice(2), ' + JSON.stringify(profile.args ?? []) + ');\n' +
+				Object.entries(profile.env ?? {}).map(([key, value]) =>
+					'deepEqual(process.env[' + JSON.stringify(key) + '], ' + JSON.stringify(value) + ');').join('\n') +
+				executable;
 			if (windows) {
-				const pkg = path.join(bin, 'node_modules', '@agentclientprotocol', binary, 'dist');
-				await fs.mkdir(pkg, { recursive: true });
-				await fs.writeFile(path.join(pkg, 'index.js'), executable);
+				const entry = path.join(bin, 'node_modules', profile.npm.package, profile.npm.entry);
+				await fs.mkdir(path.dirname(entry), { recursive: true });
+				const commonJs = path.join(path.dirname(entry), 'fixture.cjs');
+				await fs.writeFile(commonJs, script);
+				await fs.writeFile(entry, '#!/usr/bin/env node\nimport("./fixture.cjs")');
 				await fs.writeFile(path.join(bin, binary + '.cmd'), '@exit /b 1');
 			} else {
-				await fs.writeFile(path.join(bin, binary), '#!/usr/bin/env node\n' + executable, { mode: 0o755 });
+				await fs.writeFile(path.join(bin, binary), script, { mode: 0o755 });
 			}
 			const context = { extension: { packageJSON: { version: '0.1.0' } }, globalState: { get: (_, fallback) => fallback, update: async () => {} } };
 			const record = { id: agent, agent, messages: [] };
-			const runtime = { launch: id => store.launch(id), agentEnvironment: (id, launch) => store.agentEnvironment(id, launch) };
-			mock.workspace.getConfiguration = () => ({ get: (key, fallback) => key.endsWith('Allowed') || fallback });
+			const runtime = { launch: id => store.launch(id), sessionCommand: (id, launch) => store.sessionCommand(id, launch) };
+			mock.workspace.getConfiguration = () => ({ get: (key, fallback) => key === 'enabledAgents' ? Object.keys(agents) : key.endsWith('Allowed') || fallback });
 			let available = false;
 			const states = [];
 			const session = createSession(context, { ...runtime, launch: id => available ? runtime.launch(id) : undefined }, record, msg => states.push(msg), () => {});
@@ -221,11 +303,30 @@ test('Remote SSH agents use the host runtime, credentials and file paths', async
 		} else {
 			await fs.writeFile(path.join(bin, 'codex'), '#!/bin/sh\nexit 0\n', { mode: 0o755 });
 		}
+		const agy = path.join(bin, windows ? 'agy.exe' : 'agy');
+		await fs.writeFile(agy, '', { mode: 0o755 });
+		assert.equal(await store.isInstalled('antigravity'), false);
+		const external = await store.launch('antigravity');
+		assert.equal(external.command, agy);
+		assert.deepEqual(external.args, ['acp']);
+		await store.signIn('antigravity');
+		assert.deepEqual(terminal.shellArgs, ['acp', '--login']);
 		await store.signIn('codex');
 		assert.deepEqual(terminal.shellArgs.slice(-2), ['login', '--device-auth']);
 		assert.equal(terminal.cwd.fsPath, os.homedir());
 
-		await testManagedInstall(root, store, agents, mock);
+		await store.signIn('github-copilot-cli');
+		assert.deepEqual(terminal.shellArgs.slice(windows ? 1 : 0), ['login']);
+		assert.equal(terminal.cwd.fsPath, os.homedir());
+		await store.signIn('grok');
+		assert.deepEqual(terminal.shellArgs.slice(windows ? 1 : 0), ['login', '--device-auth']);
+		credentials.set('agent-auth.remote.ssh-remote+test.grok', JSON.stringify({ mode: 'key', key: 'fixture-grok-key' }));
+		const grokLaunch = await store.launch('grok');
+		const { env } = await store.sessionCommand('grok', grokLaunch);
+		assert.equal(env.XAI_API_KEY, 'fixture-grok-key');
+		assert.equal(env.GROK_HOME, path.join(managed, 'grok-api-key'));
+		assert.notEqual((await store.sessionCommand('cline', grokLaunch)).env.XAI_API_KEY, 'fixture-grok-key');
+		await testManagedInstall(root, store, agents, mock, installIssue);
 	} finally {
 		hooks.deregister();
 		delete globalThis.__otrionTestVscode;
@@ -236,7 +337,7 @@ test('Remote SSH agents use the host runtime, credentials and file paths', async
 
 // Use the real packaged npm against a loopback registry. Each fixture's install script
 // spawns "node" by name, just like dependencies that need the host runtime during setup.
-async function testManagedInstall(root, store, agents, mock) {
+async function testManagedInstall(root, store, agents, mock, installIssue) {
 	const appRoot = process.env.OTRION_CHAT_TEST_EXTENSION ? path.resolve(extension, '../..') : path.join(root, 'server');
 	const npmDir = path.join(appRoot, 'agent-tools', 'npm');
 	if (!process.env.OTRION_CHAT_TEST_EXTENSION) {
@@ -245,17 +346,24 @@ async function testManagedInstall(root, store, agents, mock) {
 	mock.env.appRoot = appRoot;
 	const npm = path.join(npmDir, 'bin', 'npm-cli.js');
 	const files = new Map();
-	for (const agent of Object.values(agents)) {
+	for (const agent of Object.values(agents).filter(agent => agent.npm)) {
 		const pkg = path.join(root, agent.binary);
-		await fs.mkdir(path.join(pkg, 'dist'), { recursive: true });
-		const name = '@agentclientprotocol/' + agent.binary;
-		await fs.writeFile(path.join(pkg, 'package.json'), JSON.stringify({ name, version: agent.version,
+		const entry = path.join(pkg, agent.npm.entry);
+		await fs.mkdir(path.dirname(entry), { recursive: true });
+		const name = agent.npm.package;
+		await fs.writeFile(path.join(pkg, 'package.json'), JSON.stringify({ name, version: agent.npm.version, bin: { [agent.binary]: agent.npm.entry },
 			scripts: { postinstall: 'node record-runtime.js' } }));
-		await fs.writeFile(path.join(pkg, 'record-runtime.js'), "require('node:fs').writeFileSync('install-runtime', process.execPath)");
-		await fs.writeFile(path.join(pkg, 'dist/index.js'), 'console.log(process.execPath)');
+		const record = "require('node:fs').writeFileSync('install-runtime', process.execPath)";
+		const install = agent.binary === 'grok' ? `
+			const fs = require('node:fs'), path = require('node:path');
+			const bin = path.join(process.env.GROK_HOME, 'bin');
+			fs.mkdirSync(bin, {recursive: true});
+			fs.copyFileSync('bin/grok', path.join(bin, 'grok-${agent.npm.version}${windows ? '.exe' : ''}'));` : '';
+		await fs.writeFile(path.join(pkg, 'record-runtime.js'), record + ';' + install);
+		await fs.writeFile(entry, '#!/usr/bin/env node\nconsole.log(process.execPath)');
 		const { stdout } = await promisify(execFile)(process.execPath, [npm, 'pack', '--json', '--ignore-scripts', '--cache', path.join(root, 'cache')], { cwd: pkg });
 		const [{ filename, integrity }] = JSON.parse(stdout);
-		files.set(name, { version: agent.version, integrity, tar: await fs.readFile(path.join(pkg, filename)) });
+		files.set(name, { version: agent.npm.version, integrity, tar: await fs.readFile(path.join(pkg, filename)) });
 	}
 	const registry = createServer((req, res) => {
 		const name = decodeURIComponent(req.url.slice(1)).replace(/\.tgz$/, '');
@@ -278,12 +386,23 @@ async function testManagedInstall(root, store, agents, mock) {
 		if (!windows) { await fs.symlink('/bin/sh', path.join(shellDir, 'sh')); }
 		process.env.PATH = windows ? path.dirname(process.env.ComSpec || 'C:\\Windows\\System32\\cmd.exe') : shellDir;
 		for (const id of Object.keys(agents)) {
+			if (!agents[id].npm) { continue; }
+			if (installIssue(id)) {
+				await assert.rejects(store.install(id), { message: installIssue(id) });
+				continue;
+			}
 			await store.install(id);
 			const launch = await store.launch(id);
 			assert.equal(launch.source, 'Installed by Otrion');
 			assert.equal(launch.command, process.execPath);
-			assert.equal(await fs.readFile(path.resolve(launch.args[0], '../../install-runtime'), 'utf8'), process.execPath);
-			const env = await store.agentEnvironment(id, launch);
+			const profile = agents[id];
+			assert.deepEqual(launch.args.slice(1), profile.args ?? []);
+			if (id !== 'grok') {
+				const directory = id + '-' + profile.npm.version;
+				const pkg = path.join(root, 'managed', directory, 'node_modules', profile.npm.package);
+				assert.equal(await fs.readFile(path.join(pkg, 'install-runtime'), 'utf8'), process.execPath);
+			}
+			const { env } = await store.sessionCommand(id, launch);
 			const result = await promisify(execFile)(launch.command, launch.args, { env });
 			assert.equal(result.stdout.trim(), process.execPath);
 			await store.install(id); // already installed
