@@ -202,6 +202,12 @@ function renderSessionChoices() {
 	for (const item of sessionChoices) {
 		if (!(item.label + ' ' + (item.detail ?? '') + ' ' + (item.cwd ?? '')).toLowerCase().includes(query)) { continue; }
 		const button = document.createElement('button');
+		if (menuKind === 'new') {
+			const icon = document.createElement('span');
+			icon.className = 'agent-icon';
+			icon.setAttribute('aria-hidden', 'true');
+			button.append(icon);
+		}
 		const label = document.createElement('span');
 		label.textContent = item.label;
 		button.append(label);
@@ -677,7 +683,7 @@ window.addEventListener('message', ({ data }) => {
 		if (data.needsSetup) {
 			element('home-instruction').textContent = data.installed
 				? `Enable an installed agent to start chatting ${data.location}.`
-				: `Install and enable Codex or Claude Code to start chatting ${data.location}.`;
+				: `Install and enable a chat agent to start chatting ${data.location}.`;
 		} else {
 			renderRecent([], 'Loading recent conversations…');
 			post({ type: 'listHistory', home: true, request: recentRequest });
@@ -693,7 +699,7 @@ window.addEventListener('message', ({ data }) => {
 		trusted = data.trusted;
 		loaded = true;
 		element('home').hidden = true;
-		agentName = data.selected === 'claude' ? 'Claude Code' : 'Codex';
+		agentName = data.agentName;
 		document.querySelector('footer')!.hidden = false;
 		element('welcome-title').textContent = 'Start a conversation';
 		if (tabId !== data.tabId) {
@@ -774,7 +780,7 @@ async function addImages(files: File[]) {
 			attachedImages.push(...images);
 			renderImageStrip();
 			saveDraft();
-		} else if (owner in drafts) {
+		} else if (Object.hasOwn(drafts, owner)) {
 			const draft = drafts[owner];
 			drafts[owner] = [...(typeof draft === 'string' ? [{ type: 'text' as const, text: draft }] : draft), ...images];
 			api.setState({ drafts });

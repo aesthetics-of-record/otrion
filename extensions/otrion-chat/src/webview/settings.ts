@@ -88,32 +88,39 @@
 				const action = button.dataset.action;
 				if (action === 'cli' || action === 'key') {
 					button.setAttribute('aria-pressed', String(action === row.mode));
-				} else if (action === 'login') {
-					button.hidden = byok || !enabled || row.auth === 'Signed in';
+				} else if (action === 'login' || action === 'guide') {
+					button.hidden = byok || !enabled || row.authenticated;
+					button.disabled = row.signingIn;
 				} else {
 					button.hidden = !byok || (action === 'removeKey' && !row.hasKey);
 					if (action === 'replaceKey') { button.textContent = row.hasKey ? 'Replace key' : 'Add key'; }
 				}
 			}
-			section.querySelector<HTMLElement>('.auth-note')!.hidden = !byok;
-			auth.textContent = byok ? (row.hasKey ? 'API key saved' : 'API key required') : row.auth === 'Unknown' ? 'Login status unavailable' : row.auth ?? '';
-			auth.classList.toggle('signed-in', byok ? row.hasKey : row.auth === 'Signed in');
+			section.querySelector<HTMLElement>('.auth-options')!.hidden = !enabled && !byok;
+			const note = section.querySelector<HTMLElement>('.auth-note');
+			if (note) { note.hidden = !byok; }
+			auth.textContent = byok ? (row.hasKey ? 'API key saved' : 'API key required') : row.authenticated || row.auth === 'Check account with /doctor' ? row.auth
+				: row.signingIn ? 'Signing in…' : row.auth === 'Unknown' ? 'Login status unavailable' : row.auth ?? '';
+			auth.classList.toggle('signed-in', byok ? row.hasKey : row.authenticated);
 			primary.hidden = enabled;
 			primary.dataset.action = row.source ? 'enable' : 'install';
-			primary.disabled = row.installing || (!row.source && row.installed);
-			primary.textContent = row.installing ? (data.remote ? 'Installing ' + data.location + '…' : 'Installing…') : row.source ? 'Enable' : row.installed ? 'Unavailable' : 'Install';
+			const unavailable = row.installed || row.installIssue;
+			primary.disabled = row.installing || (!row.source && unavailable);
+			primary.textContent = row.installing ? (data.remote ? 'Installing ' + data.location + '…' : 'Installing…') : row.source ? 'Enable' : unavailable ? 'Unavailable' : 'Install';
 			section.querySelector<HTMLElement>('.enabled')!.hidden = !enabled;
 			section.querySelector('.agent-info')!.setAttribute('title', row.availability);
 			const menu = section.querySelector<HTMLElement>('.menu')!;
 			for (const item of menu.querySelectorAll<HTMLButtonElement>('button')) {
 				item.disabled = false;
-				item.hidden = item.dataset.action === 'install' ? !row.source || row.installed || row.installing
-					: !row.allowed;
+				item.hidden = item.dataset.action === 'install' ? !row.source || row.installed || row.installing || !!row.installIssue
+					: item.dataset.action === 'key' ? enabled || byok
+					: item.dataset.action === 'disable' && !row.allowed;
 			}
 			const more = section.querySelector<HTMLButtonElement>('.more')!;
 			more.disabled = !menu.querySelector('button:not([hidden])');
 			if (more.disabled) { menu.hidePopover(); }
-			section.querySelector('.error')!.textContent = row.error || (!row.source && row.availability !== 'Not installed' ? row.availability : '');
+			const unavailableReason = row.availability === 'Not installed' ? row.installIssue : row.availability;
+			section.querySelector('.error')!.textContent = row.error || (!row.source && unavailableReason) || '';
 		}
 	});
 	host.postMessage({ action: 'ready' });

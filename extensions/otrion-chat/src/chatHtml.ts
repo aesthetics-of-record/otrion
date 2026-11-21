@@ -2,6 +2,7 @@
 
 import { randomBytes } from 'node:crypto';
 import * as vscode from 'vscode';
+import { agentIds } from './agentCatalog';
 
 export function chatHtml(web: vscode.Webview, media: vscode.Uri, scripts: vscode.Uri) {
 	const nonce = randomBytes(16).toString('base64');
@@ -13,6 +14,7 @@ export function chatHtml(web: vscode.Webview, media: vscode.Uri, scripts: vscode
 <html lang="en"><head><meta charset="utf-8">
 <meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src ${web.cspSource} https: data:; style-src ${web.cspSource} 'nonce-${nonce}'; script-src ${web.cspSource};">
 <style nonce="${nonce}">
+	${agentIds.map(id => '#session-choices [data-choice="' + id + '"] .agent-icon { mask-image: url("' + resource(media, id + '.svg') + '"); }').join('\n')}
 	body { margin: 0; background: var(--vscode-sideBar-background); }
 	#chat-loading:not([hidden]) { position: fixed; inset: 0; display: grid; place-content: center; justify-items: center; gap: 8px; color: var(--vscode-descriptionForeground); font: 12px var(--vscode-font-family, system-ui); opacity: 0; animation: chat-loading-in 160ms ease-out 180ms forwards; }
 	@keyframes chat-loading-in { to { opacity: 1; } }

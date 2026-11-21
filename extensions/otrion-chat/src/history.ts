@@ -40,9 +40,9 @@ export class SessionHistory {
 				const launch = await this.store.launch(agent);
 				if (generation !== this.generation || !allowed(agent)) { return; }
 				if (!launch) { throw new Error('Install the adapter in Otrion Settings.'); }
-				const env = await this.store.agentEnvironment(agent, launch);
+				const command = await this.store.sessionCommand(agent, launch);
 				if (generation !== this.generation || !allowed(agent)) { return; }
-				client = new AcpClient(agent, launch.command, launch.args, cwd, env, () => {});
+				client = new AcpClient(agent, command.command, command.args, cwd, command.env, () => {});
 				this.clients.add(client);
 				await client.listSessions(this.context.extension.packageJSON.version, sessions => {
 					if (generation !== this.generation) { return; }

@@ -4,7 +4,7 @@ import { spawn, type ChildProcessWithoutNullStreams } from 'node:child_process';
 import { isAbsolute } from 'node:path';
 import { createInterface, type Interface } from 'node:readline';
 
-import { agents, type AgentId } from './agents';
+import { agents, type AgentId } from './agentCatalog';
 
 import type { ContentBlock, ToolContent, ChatMessage } from './transcript';
 
@@ -30,6 +30,7 @@ export interface SessionUpdate {
 	rawOutput?: unknown;
 	availableCommands?: { name: string; description?: string }[];
 	configOptions?: unknown;
+	currentModeId?: string;
 	size?: number;
 	used?: number;
 	sessionUpdate: string;
@@ -46,12 +47,36 @@ export interface AgentSessionInfo {
 	updatedAt?: string;
 }
 
+export interface AgentAuthMethod {
+	id: string;
+	name: string;
+	description?: string;
+	type?: string;
+	args?: string[];
+	env?: Record<string, string>;
+}
+
+export class AuthenticationRequired extends Error {}
+
+class AcpRequestError extends Error {
+	constructor(message: string, readonly code: number, readonly data?: { uri?: string; sessionId?: string }) {
+		super(message);
+	}
+}
+
 interface AcpResult {
-	_meta?: { steering?: { supported?: boolean } };
+	providerId?: string | null;
+	modelId?: string | null;
+	entries?: { providerId: string; configured: boolean }[];
+	authMethods?: AgentAuthMethod[];
+	cells?: { kind: string; status: string; detail?: { source?: string; hasToken?: boolean | 'unknown' } }[];
+	_meta?: { steering?: { supported?: boolean }; defaultAuthMethodId?: string | null };
 	outcome?: string;
 	sessions?: AgentSessionInfo[];
 	nextCursor?: string | null;
 	configOptions?: unknown;
+	modes?: { currentModeId: string; availableModes: { id: string; name: string; description?: string }[] };
+	models?: { currentModelId: string; availableModels: { modelId: string; name: string; description?: string }[] };
 	agentCapabilities?: { promptCapabilities?: { image?: boolean }; loadSession?: boolean; sessionCapabilities?: { list?: object } };
 	protocolVersion?: number;
 	sessionId?: string;
@@ -71,6 +96,8 @@ export class AcpClient {
 	#nextId = 0;
 	#closed = false;
 	#sessionId?: string;
+	#configOptions: { category?: string; id?: string }[] = [];
+	#legacyOptions = new Map<'mode' | 'model', { currentValue: string; options: { value: string; name: string; description?: string }[] }>();
 	// Some adapters publish usage or settings before replying to session/new.
 	#initialUpdates = new Map<string, SessionUpdate[]>();
 	get closed() { return this.#closed; }
@@ -98,25 +125,36 @@ export class AcpClient {
 	supportsImages = false;
 	supportsSteering = false;
 
-	async #initialize(version: string) {
+	async #initialize(version: string, terminalAuth = false, timeout = 30_000) {
 		const result = await this.#request('initialize', {
 			protocolVersion: 1,
 			clientCapabilities: {
+				...(terminalAuth ? { auth: { terminal: true } } : {}),
 				_meta: { terminal_output: true, terminal_output_delta: true },
 				session: { configOptions: { boolean: {} }, notices: {}, compaction: {} },
 			},
 			clientInfo: { name: 'otrion', title: 'Otrion', version },
-		}, 30_000);
+		}, timeout);
 		if (result?.protocolVersion !== 1) {
 			throw new Error('ACP agent did not negotiate protocol version 1.');
 		}
 		this.supportsSteering = result._meta?.steering?.supported === true;
 		this.supportsImages = result.agentCapabilities?.promptCapabilities?.image === true;
-		return result.agentCapabilities;
+		return result;
+	}
+
+	async authMethods(version: string) {
+		const result = await this.#initialize(version, true);
+		return (result.authMethods ?? []).filter(method => typeof method?.id === 'string' && typeof method.name === 'string'
+			&& (!method.type || method.type === 'agent' || method.type === 'terminal'));
+	}
+
+	authenticate(methodId: string) {
+		return this.#request('authenticate', { methodId }, 300_000);
 	}
 
 	async listSessions(version: string, onPage: (sessions: AgentSessionInfo[]) => void) {
-		const capabilities = await this.#initialize(version);
+		const { agentCapabilities: capabilities } = await this.#initialize(version);
 		if (!capabilities?.sessionCapabilities?.list) {
 			throw new Error('This adapter does not support session history.');
 		}
@@ -134,7 +172,7 @@ export class AcpClient {
 	}
 
 	async initialize(cwd: string, version: string, previousId?: string) {
-		const capabilities = await this.#initialize(version);
+		const { agentCapabilities: capabilities } = await this.#initialize(version);
 		if (previousId && !capabilities?.loadSession) {
 			throw new Error('This adapter cannot resume archived sessions. Start a new tab to continue.');
 		}
@@ -148,23 +186,62 @@ export class AcpClient {
 			throw new Error('ACP agent did not return a session ID.');
 		}
 		this.#sessionId = sessionId;
-		if (session.configOptions) {
-			this.#onUpdate({ sessionUpdate: 'config_option_update', configOptions: session.configOptions });
+		if (Array.isArray(session.modes?.availableModes)) {
+			this.#legacyOptions.set('mode', { currentValue: session.modes.currentModeId,
+				options: session.modes.availableModes.map(({ id, name, description }) => ({ value: id, name, description })) });
 		}
+		if (Array.isArray(session.models?.availableModels)) {
+			this.#legacyOptions.set('model', { currentValue: session.models.currentModelId,
+				options: session.models.availableModels.map(({ modelId, name, description }) => ({ value: modelId, name, description })) });
+		}
+		if (Array.isArray(session.configOptions)) { this.#configOptions = session.configOptions; }
+		if (this.#configOptions.length || this.#legacyOptions.size) { this.#publishOptions(); }
 		for (const update of this.#initialUpdates.get(sessionId) ?? []) {
-			this.#onUpdate(update);
+			this.#update(update);
 		}
 		this.#initialUpdates.clear();
 		return sessionId;
 	}
 
 	async setOption(configId: string, value: string | boolean) {
+		for (const [kind, option] of this.#legacyOptions) {
+			if (configId === 'acp.' + kind && typeof value === 'string' && !this.#hasConfig(kind)) {
+				await this.#request('session/set_' + kind, { sessionId: this.#sessionId, [kind + 'Id']: value }, 30_000);
+				option.currentValue = value;
+				this.#publishOptions();
+				return;
+			}
+		}
 		const result = await this.#request('session/set_config_option', {
 			sessionId: this.#sessionId, configId, value,
 			...(typeof value === 'boolean' ? { type: 'boolean' } : {}),
 		}, 30_000);
 		if (Array.isArray(result?.configOptions)) {
-			this.#onUpdate({ sessionUpdate: 'config_option_update', configOptions: result.configOptions });
+			this.#update({ sessionUpdate: 'config_option_update', configOptions: result.configOptions });
+		}
+	}
+
+	#hasConfig(kind: string) {
+		return this.#configOptions.some(option => option?.category === kind || option?.id === 'acp.' + kind);
+	}
+
+	#publishOptions() {
+		const configOptions: unknown[] = [...this.#configOptions];
+		for (const [kind, option] of this.#legacyOptions) {
+			if (!this.#hasConfig(kind)) { configOptions.push({ id: 'acp.' + kind, category: kind, type: 'select', ...option }); }
+		}
+		this.#onUpdate({ sessionUpdate: 'config_option_update', configOptions });
+	}
+
+	#update(update: SessionUpdate) {
+		if (update.sessionUpdate === 'config_option_update' && Array.isArray(update.configOptions)) {
+			this.#configOptions = update.configOptions;
+			this.#publishOptions();
+		} else if (update.sessionUpdate === 'current_mode_update' && typeof update.currentModeId === 'string') {
+			const option = this.#legacyOptions.get('mode');
+			if (option) { option.currentValue = update.currentModeId; this.#publishOptions(); }
+		} else {
+			this.#onUpdate(update);
 		}
 	}
 
@@ -249,8 +326,8 @@ export class AcpClient {
 			} else if (message.method === 'session/update' && typeof message.params?.sessionId === 'string' && message.params.update) {
 				const { sessionId, update } = message.params;
 				if (sessionId === this.#sessionId) {
-					this.#onUpdate(update);
-				} else if (!this.#sessionId && (update.sessionUpdate === 'usage_update' || update.sessionUpdate === 'config_option_update' || update.sessionUpdate === 'available_commands_update' || update.sessionUpdate === 'notice')) {
+					this.#update(update);
+				} else if (!this.#sessionId && (update.sessionUpdate === 'usage_update' || update.sessionUpdate === 'config_option_update' || update.sessionUpdate === 'current_mode_update' || update.sessionUpdate === 'available_commands_update' || update.sessionUpdate === 'notice')) {
 					const updates = this.#initialUpdates.get(sessionId) ?? [];
 					updates.push(update);
 					this.#initialUpdates.set(sessionId, updates);
@@ -263,8 +340,9 @@ export class AcpClient {
 			this.#pending.delete(message.id);
 			clearTimeout(pending.timer);
 			if (message.error) {
-				const hint = message.error.code === -32000 ? ' Open Otrion Settings and sign in to ' + agents[this.id].name + '.' : '';
-				pending.reject(new Error((message.error.message || 'ACP agent request failed.') + hint));
+				const hint = message.error.code === -32000 ? ' Check the authentication settings for ' + agents[this.id].name + ' in Otrion Settings.' : '';
+				const reason = (message.error.message || 'ACP agent request failed.') + hint;
+				pending.reject(hint ? new AuthenticationRequired(reason) : new AcpRequestError(reason, message.error.code, message.error.data));
 			} else {
 				pending.resolve(message.result);
 			}

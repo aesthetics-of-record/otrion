@@ -4,7 +4,7 @@ import { randomUUID } from 'node:crypto';
 import { basename, isAbsolute, relative, resolve, sep } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import * as vscode from 'vscode';
-import { AcpClient, type PromptPart, type SessionUpdate } from './acp';
+import { AcpClient, AuthenticationRequired, type PromptPart, type SessionUpdate } from './acp';
 import { agents, agentLocation, AgentStore, allowed, type AgentId } from './agents';
 import { readSessionOptions, type SessionOption } from './sessionOptions';
 import { applyTranscriptUpdate, type ChatMessage } from './transcript';
@@ -76,7 +76,7 @@ export async function workspaceDirectory(context: vscode.ExtensionContext) {
 }
 
 export function createSession(context: vscode.ExtensionContext, store: AgentStore, record: SessionRecord,
-	emit: (message: object) => void, changed: () => void) {
+	emit: (message: { type: string; [key: string]: unknown }) => void, changed: () => void) {
 	const selected = record.agent;
 	record.pendingFirstPrompt ??= !!record.ordinal && !record.messages.length && !record.title;
 	let client: AcpClient | undefined;
@@ -148,7 +148,7 @@ export function createSession(context: vscode.ExtensionContext, store: AgentStor
 		void emit({ type: 'state', tabId: record.id, messages, queue: queue.map(({ id, label }) => ({ id, label })),
 			deliveryError: queue.some(item => item.uncertain) ? 'Delivery was not confirmed. Check the conversation before sending again.' : undefined,
 			canSteer: !!(turn?.prompting && !turn.cancelled && client?.supportsSteering && !steering), steering: !!steering,
-			status, connectionIssue, location: agentLocation(), busy: !!turn, activity: turn?.activity, selected,
+			status, connectionIssue, location: agentLocation(), busy: !!turn, activity: turn?.activity, selected, agentName: agents[selected].name,
 			allowed: allowed(selected), trusted: vscode.workspace.isTrusted, ...metadata() });
 	}
 
@@ -198,17 +198,17 @@ export function createSession(context: vscode.ExtensionContext, store: AgentStor
 		const workspace = await workspaceDirectory(context);
 		const cwd = record.cwd ?? workspace;
 		const launch = await store.launch(id);
-		const env = launch ? await store.agentEnvironment(id, launch) : undefined;
+		const command = launch && await store.sessionCommand(id, launch);
 		if (disposed || turn?.cancelled || !allowed(id) || !vscode.workspace.isTrusted) {
 			throw new Error('Agent session cancelled.');
 		}
-		if (!launch || !env) {
+		if (!command) {
 			throw new AgentSetupError('Install the adapter ' + agentLocation() + ' or check its configured path.');
 		}
 		// Codex may only persist a thread after its first prompt. Older local tabs have an ordinal.
 		const previousId = record.pendingFirstPrompt ? undefined : record.remoteId;
 		let replay: ChatMessage[] | undefined = previousId ? [] : undefined;
-		const session: AcpClient = new AcpClient(id, launch.command, launch.args, cwd, env, update => {
+		const session: AcpClient = new AcpClient(id, command.command, command.args, cwd, command.env, update => {
 			if (client !== session) { return; }
 			if (update.sessionUpdate === 'notice') {
 				const model = recordedModelFromNotice(update.title, update.description);
@@ -277,7 +277,7 @@ export function createSession(context: vscode.ExtensionContext, store: AgentStor
 			}
 		} catch (error) {
 			status = error.message;
-			connectionIssue = error instanceof AgentSetupError ? 'setup' : !client || client.closed ? 'connection' : undefined;
+			connectionIssue = (error instanceof AgentSetupError || error instanceof AuthenticationRequired) ? 'setup' : !client || client.closed ? 'connection' : undefined;
 			if (client?.closed) { disconnect(); }
 		} finally {
 			configuring = false;
@@ -421,8 +421,8 @@ export function createSession(context: vscode.ExtensionContext, store: AgentStor
 			disconnect();
 			if (!queuedId) { emit({ type: 'restoreDraft', tabId: record.id, parts: input }); }
 			if (!active.prompting && messages.at(-1) === pendingMessage) { messages.pop(); }
-			if (!active.cancelled && !active.prompting) {
-				connectionIssue = error instanceof AgentSetupError ? 'setup' : 'connection';
+			if (!active.cancelled && (!active.prompting || error instanceof AuthenticationRequired)) {
+				connectionIssue = (error instanceof AgentSetupError || error instanceof AuthenticationRequired) ? 'setup' : 'connection';
 				status = error.message;
 			} else if (!active.cancelled) {
 				messages.push({ role: 'Connection', text: error.message });
