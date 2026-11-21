@@ -34,6 +34,51 @@ test('Antigravity checks the native download and isolates Gemini key settings', 
 	} finally { await fs.rm(home, { recursive: true, force: true }); }
 });
 
+test('Settings probes use the authentication signal for each ACP agent', async () => {
+	const { AcpClient } = require(path.join(extension, 'out', 'acp.js'));
+	const adapter = `
+		const replies = JSON.parse(process.argv[1]);
+		require('node:readline').createInterface({ input: process.stdin }).on('line', line => {
+			const { method, id, params } = JSON.parse(line);
+			const reply = JSON.stringify(replies[method] ?? { error: { code: -32601, message: 'Method not found' } });
+			console.log(JSON.stringify({ jsonrpc: '2.0', id, ...JSON.parse(reply.replaceAll('$session', params.sessionId ?? '')) }));
+		});`;
+	async function probe(id, init, list, extraReplies = {}) {
+		const replies = { initialize: { result: { protocolVersion: 1, ...init } }, 'session/list': list, ...extraReplies };
+		const client = new AcpClient(id, process.execPath, ['-e', adapter, JSON.stringify(replies)], os.tmpdir(), {}, () => {});
+		try { return await client.accountStatus('test'); } finally { client.dispose(); }
+	}
+	const capabilities = { agentCapabilities: { sessionCapabilities: { list: {} } } };
+	const success = { result: { sessions: [] } };
+	const status = await Promise.all([
+		probe('antigravity', capabilities, { error: { code: -32000, message: 'Authentication required' } }),
+		probe('antigravity', capabilities, success),
+		probe('antigravity', capabilities, { error: { code: -32603, message: 'Service unavailable' } }),
+		// Grok can return a session list and advertise interactive login even when signed out.
+		...[null, 'cached_token', 'xai.api_key', undefined].map(defaultAuthMethodId =>
+			probe('grok', { ...capabilities, authMethods: [{ id: 'grok.com', name: 'Grok' }], _meta: { defaultAuthMethodId } }, success)),
+	]);
+	assert.deepEqual(status, ['Signed out', 'Signed in', 'Unknown', 'Signed out', 'Signed in', 'CLI API key', 'Unknown']);
+	const loadable = { agentCapabilities: { loadSession: true } };
+	for (const [id, code, data, message] of [
+		['cline', -32002, { uri: '$session' }, 'Resource not found'],
+		['github-copilot-cli', -32002, { uri: 'Session $session not found' }, 'Resource not found'],
+		['kimi-code', -32602, { sessionId: '$session' }, 'Invalid params: Unknown sessionId: $session'],
+	]) {
+		const lookup = error => probe(id, loadable, success, { 'session/load': { error } });
+		assert.deepEqual(await Promise.all([
+			lookup({ code, data, message }),
+			lookup({ code: -32000, message: 'Authentication required' }),
+			lookup({ code, data: {}, message: 'Unrelated error' }),
+		]), ['Signed in', 'Signed out', 'Unknown']);
+	}
+	const preflight = (state, hasToken) => probe('qwen-code', {}, success, { 'qwen/status/workspace/preflight': {
+		result: { cells: [{ kind: 'auth', status: state, detail: { hasToken } }] }
+	} });
+	assert.deepEqual(await Promise.all([preflight('ok', true), preflight('warning', false), preflight('unknown', 'unknown')]),
+		['CLI credentials configured', 'Signed out', 'Check account with /doctor']);
+});
+
 test('ACP agents can offer legacy session options and protocol sign-in methods', async () => {
 	const { AcpClient, AuthenticationRequired } = require(path.join(extension, 'out', 'acp.js'));
 	const adapter = `
@@ -139,6 +184,19 @@ test('Remote SSH agents use the host runtime, credentials and file paths', async
 		assert.deepEqual(Object.keys(agents).filter(supportsKey).sort(), ['antigravity', 'claude', 'cline', 'codex', 'grok']);
 		credentials.set('agent-auth.remote.ssh-remote+test.opencode', JSON.stringify({ mode: 'key', key: 'old-key' }));
 		assert.deepEqual(await store.authChoice('opencode'), { mode: 'cli', hasKey: false });
+		for (const [id, output, expected] of [
+			['opencode', '[]', 'No provider credentials'],
+			['opencode', '[{"connections":[{"type":"credential","method":"oauth"}]}]', 'Signed in'],
+			['opencode', '[{"connections":[{"type":"env","name":"OPENAI_API_KEY"}]}]', 'Provider configured'],
+			['opencode', '{}', 'Unknown'],
+			['kilo', '└  0 credentials', 'No provider credentials'],
+			['kilo', '●  OpenAI oauth\n└  1 credentials', 'Signed in'],
+			['kilo', '└  0 credentials\n└  1 environment variable', 'Provider configured'],
+			['kilo', 'Unexpected output', 'Unknown'],
+		]) {
+			const cli = { command: process.execPath, args: [], baseArgs: ['-e', 'console.log(process.env.FIXTURE)', '--'], env: { FIXTURE: output } };
+			assert.equal(await store.authStatus(id, cli), expected);
+		}
 		const executable = `
 			const assert = require('node:assert/strict');
 			const fs = require('node:fs');

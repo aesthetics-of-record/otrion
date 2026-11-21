@@ -1,6 +1,7 @@
 /* Copyright (c) Otrion contributors. Licensed under the MIT License. */
 
 import { spawn, type ChildProcessWithoutNullStreams } from 'node:child_process';
+import { randomUUID } from 'node:crypto';
 import { isAbsolute } from 'node:path';
 import { createInterface, type Interface } from 'node:readline';
 
@@ -104,7 +105,7 @@ export class AcpClient {
 
 	#onUpdate: (update: SessionUpdate) => void;
 
-	constructor(private readonly id: AgentId, command: string, args: string[], cwd: string, env: NodeJS.ProcessEnv, onUpdate: (update: SessionUpdate) => void) {
+	constructor(private readonly id: AgentId, command: string, args: string[], private readonly cwd: string, env: NodeJS.ProcessEnv, onUpdate: (update: SessionUpdate) => void) {
 		this.#onUpdate = onUpdate;
 		this.#process = spawn(command, args, {
 			cwd,
@@ -141,6 +142,46 @@ export class AcpClient {
 		this.supportsSteering = result._meta?.steering?.supported === true;
 		this.supportsImages = result.agentCapabilities?.promptCapabilities?.image === true;
 		return result;
+	}
+
+	async accountStatus(version: string) {
+		try {
+			const result = await this.#initialize(version, false, 5000);
+			if (this.id === 'grok') {
+				// Grok lists sessions even while signed out. Only the selected credential is meaningful.
+				const method = result._meta?.defaultAuthMethodId;
+				if (method === 'cached_token') { return 'Signed in'; }
+				if (method === 'xai.api_key') { return 'CLI API key'; }
+				return method === null ? 'Signed out' : 'Unknown';
+			}
+			if (this.id === 'qwen-code') {
+				const preflight = await this.#request('qwen/status/workspace/preflight', {}, 5000);
+				const auth = preflight.cells?.find(cell => cell.kind === 'auth');
+				if (auth?.status === 'ok' && auth.detail?.hasToken === true) { return 'CLI credentials configured'; }
+				if (auth?.status === 'warning' && auth.detail?.hasToken === false) { return 'Signed out'; }
+				return 'Check account with /doctor';
+			}
+			if (result.agentCapabilities?.loadSession && (this.id === 'cline' || this.id === 'github-copilot-cli' || this.id === 'kimi-code')) {
+				// These adapters check auth before looking up a session. A fresh ID never opens a real conversation.
+				const sessionId = randomUUID();
+				try {
+					await this.#request('session/load', { sessionId, cwd: this.cwd, mcpServers: [] }, 5000);
+				} catch (error) {
+					if (!(error instanceof AcpRequestError)) { throw error; }
+					const missing = error.code === -32002 && (error.data?.uri === sessionId || error.data?.uri === 'Session ' + sessionId + ' not found');
+					const missingKimi = this.id === 'kimi-code' && error.code === -32602 && error.data?.sessionId === sessionId && error.message.endsWith('Unknown sessionId: ' + sessionId);
+					if (missing || missingKimi) { return 'Signed in'; }
+				}
+			}
+			if (this.id === 'antigravity' && result.agentCapabilities?.sessionCapabilities?.list) {
+				// This read-only request requires authentication. Only inspect the first response.
+				const page = await this.#request('session/list', {}, 5000);
+				if (Array.isArray(page.sessions)) { return 'Signed in'; }
+			}
+		} catch (error) {
+			if (error instanceof AuthenticationRequired) { return 'Signed out'; }
+		}
+		return 'Unknown';
 	}
 
 	async authMethods(version: string) {

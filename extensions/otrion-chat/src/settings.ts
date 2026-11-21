@@ -13,11 +13,14 @@ export function registerSettings(context: vscode.ExtensionContext, store: AgentS
 	let focusAgent: AgentId | 'agents' | undefined;
 	const installing = new Set<AgentId>();
 	const changingAuth = new Set<AgentId>();
+	const loginTerminals = new Map<AgentId, vscode.Terminal>();
+	let loginRefresh: ReturnType<typeof setTimeout> | undefined;
 	const errors = new Map<AgentId, string>();
 	let revision = 0;
 	let enableChange = Promise.resolve();
 
 	async function refresh(ids = agentIds) {
+		clearTimeout(loginRefresh);
 		const current = panel;
 		if (!current || currentPage !== 'agents') { return; }
 		const sequence = ++revision;
@@ -28,10 +31,24 @@ export function registerSettings(context: vscode.ExtensionContext, store: AgentS
 			const missing = setting && setting !== agents[id].binary ? 'Check the configured executable: ' + setting : installed ? missingRuntime : 'Not installed';
 			const choice = await store.authChoice(id);
 			const auth = choice.mode === 'cli' && launch && allowed(id) ? await store.authStatus(id, launch) : undefined;
-			const authenticated = auth === 'Signed in';
-			return { id, auth, authenticated, ...choice, installed, source: launch?.source, availability: launch?.source ?? missing, installIssue: installIssue(id), allowed: allowed(id), installing: installing.has(id), signingIn: changingAuth.has(id), error: errors.get(id) };
+			const authenticated = auth === 'Signed in' || auth === 'Provider configured' || auth === 'CLI credentials configured' || auth === 'CLI API key';
+			return { id, auth, authenticated, ...choice, installed, source: launch?.source, availability: launch?.source ?? missing, installIssue: installIssue(id), allowed: allowed(id), installing: installing.has(id), signingIn: changingAuth.has(id) || loginTerminals.has(id), error: errors.get(id) };
 		}));
 		if (panel === current && currentPage === 'agents' && sequence === revision) {
+			for (const row of rows) {
+				if (!loginTerminals.has(row.id)) { continue; }
+				if (row.authenticated) {
+					loginTerminals.delete(row.id);
+					onSetup(row.id);
+				} else if (!row.allowed || row.mode !== 'cli') {
+					loginTerminals.delete(row.id);
+				}
+			}
+			if (loginTerminals.size && current.visible) {
+				loginRefresh = setTimeout(() => {
+					if (current.visible) { void refresh([...loginTerminals.keys()]); }
+				}, 4000);
+			}
 			await current.webview.postMessage({ rows, remote, location: agentLocation() });
 		}
 	}
@@ -56,12 +73,13 @@ export function registerSettings(context: vscode.ExtensionContext, store: AgentS
 				enableChange = change.catch(() => {});
 				await change;
 			} else if (action === 'login') {
-				if (changingAuth.has(id)) { return; }
+				if (changingAuth.has(id) || loginTerminals.has(id)) { return; }
 				changingAuth.add(id);
 				void refresh();
 				try {
 					const result = await store.signIn(id);
 					if (result === true) { onSetup(id); }
+					else if (result && !result.exitStatus) { loginTerminals.set(id, result); }
 					else if (result && result.exitStatus?.code === 0) { onSetup(id); }
 				} finally { changingAuth.delete(id); }
 			} else if (action === 'guide') {
@@ -73,7 +91,15 @@ export function registerSettings(context: vscode.ExtensionContext, store: AgentS
 		await refresh();
 	}
 
-	context.subscriptions.push(store.onAuthChange(() => { void refresh(); }), vscode.window.onDidCloseTerminal(() => { void refresh(); }), vscode.window.onDidChangeWindowState(state => {
+	context.subscriptions.push(store.onAuthChange(() => { void refresh(); }), vscode.window.onDidCloseTerminal(t => {
+		const pending = agentIds.find(id => loginTerminals.get(id) === t);
+		if (pending) {
+			loginTerminals.delete(pending);
+			if (t.exitStatus?.code === 0) { onSetup(pending); }
+			void refresh();
+			return;
+		}
+	}), vscode.window.onDidChangeWindowState(state => {
 		if (state.focused && panel?.visible) { void refresh(); }
 	}), vscode.workspace.onDidChangeConfiguration(e => {
 		if (e.affectsConfiguration('otrion.chat')) { void refresh(); }
@@ -123,7 +149,7 @@ export function registerSettings(context: vscode.ExtensionContext, store: AgentS
 			else if (isAgent(message?.id)) { void handle(message.action, message.id, message.value); }
 		});
 		panel.onDidChangeViewState(e => { if (e.webviewPanel.active) { void refresh(); } });
-		panel.onDidDispose(() => { listener.dispose(); panel = undefined; });
+		panel.onDidDispose(() => { listener.dispose(); clearTimeout(loginRefresh); panel = undefined; });
 		// Inline host-local assets so the webview also works over SSH.
 		const current = panel;
 		const asset = (file: string) => readFile(context.asAbsolutePath(file), 'utf8');
@@ -189,5 +215,5 @@ ${agentIcons.join('\n')}</style>
 			${remote ? `<p class="agent-host">${vscode.l10n.t('Agents run {0}.', agentLocation())}</p>` : ''}
 			<div class="catalog agent-catalog"><div class="agent-search">${icon('M11 11l3 3M12 7a5 5 0 1 1-10 0 5 5 0 1 1 10 0Z')}<input id="search" type="search" placeholder="Search agents…" aria-label="Search agents"></div>
 			<div class="agents">${cards}</div><p id="empty" hidden>No matching agents.</p></div></div></main><script nonce="${nonce}">${script}</script></body></html>`;
-	}), { dispose: () => { panel?.dispose(); } });
+	}), { dispose: () => { clearTimeout(loginRefresh); loginTerminals.clear(); panel?.dispose(); } });
 }
