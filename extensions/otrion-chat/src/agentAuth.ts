@@ -27,7 +27,8 @@ export async function signInWithAgent(id: AgentId, launch: AgentLaunch) {
 	if (agent.loginArgs) {
 		const args = [...launch.baseArgs, ...agent.loginArgs];
 		if (id === 'grok' && vscode.env.remoteAuthority) { args.push('--device-auth'); }
-		const term = terminal(args);
+		const env = id === 'cursor' && vscode.env.remoteAuthority ? { ...launch.env, NO_OPEN_BROWSER: '1' } : launch.env;
+		const term = terminal(args, env);
 		term.show();
 		return term;
 	}

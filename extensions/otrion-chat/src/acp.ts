@@ -154,6 +154,14 @@ export class AcpClient {
 				if (method === 'xai.api_key') { return 'CLI API key'; }
 				return method === null ? 'Signed out' : 'Unknown';
 			}
+			if (this.id === 'goose') {
+				const defaults = await this.#request('_goose/unstable/defaults/read', {}, 5000);
+				if (!defaults.providerId || !defaults.modelId) { return 'Provider setup required'; }
+				const { entries } = await this.#request('_goose/unstable/providers/list', { providerIds: [defaults.providerId] }, 5000);
+				const provider = entries?.find(entry => entry.providerId === defaults.providerId);
+				if (provider?.configured === true) { return 'Provider configured'; }
+				return provider?.configured === false ? 'Provider setup required' : 'Unknown';
+			}
 			if (this.id === 'qwen-code') {
 				const preflight = await this.#request('qwen/status/workspace/preflight', {}, 5000);
 				const auth = preflight.cells?.find(cell => cell.kind === 'auth');

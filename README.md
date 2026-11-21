@@ -2,7 +2,7 @@
 
 <img src="resources/server/code-192.png" width="96" height="96" alt="Otrion orbit logo">
 
-Otrion is an open-source IDE built on Code - OSS, the open-source project behind Visual Studio Code. Chat alongside your editor with Codex, Claude Code, Grok Build, GitHub Copilot, Cline, Kilo, Kimi Code, Qwen Code, OpenCode, or Antigravity through the Agent Client Protocol (ACP). The selected agent runs where your project lives, on your computer, an SSH host, or in a development container.
+Otrion is an open-source IDE built on Code - OSS, the open-source project behind Visual Studio Code. Chat alongside your editor with Codex, Claude Code, Grok Build, GitHub Copilot, Cline, Kilo, Kimi Code, Qwen Code, OpenCode V2, Cursor, Pi, Goose, or Antigravity through the Agent Client Protocol (ACP). The selected agent runs where your project lives, on your computer, an SSH host, or in a development container.
 
 ## Get started
 
