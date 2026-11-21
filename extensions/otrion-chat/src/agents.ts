@@ -2,7 +2,7 @@
 
 import { execFile } from 'node:child_process';
 import { constants } from 'node:fs';
-import { access, open, mkdir, mkdtemp, rename, rm, stat } from 'node:fs/promises';
+import { access, open, mkdir, mkdtemp, readdir, rename, rm, stat } from 'node:fs/promises';
 import * as path from 'node:path';
 import { homedir } from 'node:os';
 import { createRequire } from 'node:module';
@@ -10,9 +10,10 @@ import { promisify, stripVTControlCharacters } from 'node:util';
 import * as vscode from 'vscode';
 
 import { AcpClient } from './acp';
-import { antigravityVersion, configureAntigravityKeyProfile, installAntigravity } from './antigravity';
-import { nativeVersions, nativeEntry, installNative } from './nativeAgents';
+import { configureAntigravityKeyProfile, installAntigravity } from './antigravity';
+import { nativeEntry, installNative } from './nativeAgents';
 import { agents, agentIds, piRuntime, type AgentId } from './agentCatalog';
+import { bundledVersion, compareVersions, isNewer, latestRelease, parseInstalledVersion, versionKey, type AgentRelease, type AgentVersion } from './agentUpdates';
 export { agents, isAgent, type AgentId } from './agentCatalog';
 
 export function agentLocation() {
@@ -153,7 +154,7 @@ function providerAccountStatus(id: 'opencode' | 'kilo', stdout: string, stderr: 
 }
 
 export class AgentStore {
-	constructor(private readonly root: string, private readonly secrets: vscode.SecretStorage) {}
+	constructor(private readonly root: string, private readonly secrets: vscode.SecretStorage, private readonly lookupRelease = latestRelease) {}
 
 	private authKey(id: AgentId) {
 		// SecretStorage belongs to the client even when the adapter runs on a remote host.
@@ -247,25 +248,58 @@ export class AgentStore {
 		return command;
 	}
 
-	private installation(id: AgentId) {
+	private installation(id: AgentId, release: AgentVersion) {
 		const npm = agents[id].npm;
-		const version = id === 'antigravity' ? antigravityVersion : id === 'cursor' || id === 'goose' ? nativeVersions[id] : npm!.version;
-		const directory = path.join(this.root, id + '-' + version + (id === 'pi' ? '-' + piRuntime.version : ''));
+		const directory = path.join(this.root, id + '-' + versionKey(release));
 		const binary = agents[id].binary + (process.platform === 'win32' ? '.exe' : '');
 		const entry = id === 'goose' || id === 'cursor' ? nativeEntry(id)
 			: id === 'grok' || !npm ? binary : path.join('node_modules', npm.package, npm.entry);
-		return { directory, entry };
+		return { directory, entry, release };
 	}
 
-	async isInstalled(id: AgentId) {
-		const install = this.installation(id);
-		return fileExists(path.join(install.directory, install.entry));
+	private async installed(id: AgentId) {
+		let dirs;
+		try { dirs = await readdir(this.root, { withFileTypes: true }); }
+		catch (error) { if (error.code === 'ENOENT') { return undefined; } throw error; }
+		const prefix = id + '-';
+		const candidates = await Promise.all(dirs.map(async dir => {
+			if (!dir.isDirectory() || !dir.name.startsWith(prefix)) { return undefined; }
+			const release = parseInstalledVersion(id, dir.name.slice(prefix.length));
+			if (!release) { return undefined; }
+			const install = this.installation(id, release);
+			if (!await fileExists(path.join(install.directory, install.entry))) { return undefined; }
+			const time = id === 'cursor' ? (await stat(install.directory)).mtimeMs : 0;
+			return { ...install, time };
+		}));
+		return candidates.filter(item => !!item).sort((a, b) => compareVersions(b.release, a.release) || b.time - a.time)[0];
+	}
+
+	async isInstalled(id: AgentId) { return !!await this.installed(id); }
+
+	private readonly releases = new Map<AgentId, { until: number; result: Promise<AgentRelease> }>();
+
+	async availableUpdate(id: AgentId, current: AgentVersion, force = false) {
+		let cached = this.releases.get(id);
+		if (force || !cached || cached.until <= Date.now()) {
+			const result = this.lookupRelease(id);
+			cached = { result, until: Date.now() + 3_600_000 };
+			this.releases.set(id, cached);
+			const entry = cached;
+			void result.catch(() => { entry.until = Date.now() + 60_000; });
+		}
+		const next = await cached.result;
+		if (!isNewer(id, next, current)) { return undefined; }
+		if (id === 'cursor' && compareVersions(next, current) === 0) {
+			const prior = this.installation(id, next);
+			if (await fileExists(path.join(prior.directory, prior.entry))) { return undefined; }
+		}
+		return next;
 	}
 
 	async launch(id: AgentId) {
 		const agent = agents[id];
 		const setting = configuredPath(id) || agent.binary;
-		const install = setting === agent.binary && await this.isInstalled(id) ? this.installation(id) : undefined;
+		const install = setting === agent.binary ? await this.installed(id) : undefined;
 		const remote = !!vscode.env.remoteAuthority;
 		const env: NodeJS.ProcessEnv = { ...(remote ? remoteRuntimePath() : {}), ...agent.env };
 		let base: Command | undefined;
@@ -294,7 +328,7 @@ export class AgentStore {
 		}
 		if (!base) { return undefined; }
 		return { ...base, baseArgs: base.args, args: [...base.args, ...(agent.args ?? [])], env,
-			directory: install?.directory, source: install ? 'Installed by Otrion' : 'External installation' };
+			release: install?.release, directory: install?.directory, source: install ? 'Installed by Otrion' : 'External installation' };
 	}
 
 	private async managedCommand(id: AgentId, directory: string, relativeEntry: string, remote: boolean, env: NodeJS.ProcessEnv) {
@@ -423,7 +457,7 @@ export class AgentStore {
 		return terminal;
 	}
 
-	private async installNpm(id: AgentId, staging: string) {
+	private async installNpm(id: AgentId, staging: string, release: AgentVersion) {
 		const remote = !!vscode.env.remoteAuthority;
 		let npm: Command | undefined;
 		if (remote) {
@@ -439,8 +473,8 @@ export class AgentStore {
 		}
 		const args = [...npm.args, 'install', '--prefix', staging, '--global=false', '--include=optional', '--no-save', '--no-package-lock', '--no-audit', '--no-fund'];
 		if (remote) { args.push('--cache', path.join(this.root, 'npm-cache')); }
-		args.push(agents[id].npm!.package + '@' + agents[id].npm!.version);
-		if (id === 'pi') { args.push('--engine-strict', piRuntime.package + '@' + piRuntime.version); }
+		args.push(agents[id].npm!.package + '@' + release.version);
+		if (id === 'pi') { args.push('--engine-strict', piRuntime.package + '@' + release.runtime); }
 		const env = { ...process.env, ...(remote ? remoteRuntimePath() : {}) };
 		if (id === 'grok') { env.GROK_HOME = path.join(staging, 'cli'); }
 		await promisify(execFile)(npm.command, args, { cwd: staging, env,
@@ -448,7 +482,7 @@ export class AgentStore {
 		if (id === 'grok') {
 			// The npm installer extracts a standalone executable. Keep just that pinned binary.
 			const entry = process.platform === 'win32' ? 'grok.exe' : 'grok';
-			await rename(path.join(staging, 'cli', 'bin', 'grok-' + agents[id].npm!.version + path.extname(entry)), path.join(staging, entry));
+			await rename(path.join(staging, 'cli', 'bin', 'grok-' + release.version + path.extname(entry)), path.join(staging, entry));
 			await rm(path.join(staging, 'cli'), { recursive: true });
 			await rm(path.join(staging, 'node_modules'), { recursive: true });
 		}
@@ -456,16 +490,42 @@ export class AgentStore {
 
 	async install(id: AgentId) {
 		if (await this.isInstalled(id)) { return; }
-		const install = this.installation(id);
+		await this.installRelease(id, bundledVersion(id), false);
+	}
+
+	async update(id: AgentId, target: string) {
+		const launch = await this.launch(id);
+		if (!vscode.workspace.isTrusted || !launch?.release) { throw new Error('Updates require an Otrion-managed agent in a trusted workspace.'); }
+		if (versionKey(launch.release) === target) { return; }
+		const release = await this.availableUpdate(id, launch.release);
+		if (!release || versionKey(release) !== target) { throw new Error('The available release changed. Check for updates again.'); }
+		await this.installRelease(id, release, true);
+	}
+
+	private async installRelease(id: AgentId, release: AgentRelease, update: boolean) {
+		const install = this.installation(id, release);
 		const issue = installIssue(id);
 		if (issue) { throw new Error(issue); }
 		await mkdir(this.root, { recursive: true });
 		const staging = await mkdtemp(path.join(this.root, id + '-install-'));
 		try {
-			if (agents[id].npm) { await this.installNpm(id, staging); }
-			else if (id === 'cursor' || id === 'goose') { await installNative(id, staging); }
-			else { await installAntigravity(staging); }
+			if (agents[id].npm) { await this.installNpm(id, staging, release); }
+			else if (id === 'cursor' || id === 'goose') { await installNative(id, staging, release.archive); }
+			else { await installAntigravity(staging, fetch, release.archive); }
 			if (!await fileExists(path.join(staging, install.entry))) { throw new Error('The downloaded adapter is missing its entry point.'); }
+			if (update) {
+				const remote = !!vscode.env.remoteAuthority;
+				const env = { ...process.env, ...(remote ? remoteRuntimePath() : {}), ...agents[id].env };
+				const cli = await this.managedCommand(id, staging, install.entry, remote, env);
+				if (!cli) { throw new Error('The updated agent could not be launched.'); }
+				if (id === 'pi') {
+					// The adapter negotiates ACP before starting the separate Pi runtime.
+					const runtime = path.join(staging, 'node_modules', piRuntime.package, piRuntime.entry);
+					await promisify(execFile)(cli.command, [runtime, '--version'], { cwd: homedir(), env, timeout: 15_000, windowsHide: true });
+				}
+				const client = new AcpClient(id, cli.command, [...cli.args, ...(agents[id].args ?? [])], homedir(), env, () => {});
+				await client.checkProtocol(vscode.version);
+			}
 			try {
 				await rename(staging, install.directory);
 			} catch (error) {

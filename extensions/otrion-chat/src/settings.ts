@@ -5,6 +5,7 @@ import { readFile } from 'node:fs/promises';
 import * as vscode from 'vscode';
 import { agents, agentLocation, AgentStore, allowed, configuredPath, installIssue, isAgent, setAllowed, supportsKey, type AgentId } from './agents';
 import { agentIds } from './agentCatalog';
+import { versionKey, type AgentVersion } from './agentUpdates';
 
 export function registerSettings(context: vscode.ExtensionContext, store: AgentStore, onSetup: (id: AgentId) => void) {
 	const remote = !!vscode.env.remoteAuthority;
@@ -19,6 +20,44 @@ export function registerSettings(context: vscode.ExtensionContext, store: AgentS
 	let revision = 0;
 	let enableChange = Promise.resolve();
 
+	const formatVersion = (release: AgentVersion) => release.runtime ? 'ACP ' + release.version + ' · Pi ' + release.runtime : release.version;
+
+	async function showVersion(current: vscode.WebviewPanel, id: AgentId, installed: AgentVersion, force = false) {
+		let target: string | undefined;
+		let label = formatVersion(installed);
+		try {
+			const next = await store.availableUpdate(id, installed, force);
+			if (next) { target = versionKey(next); label += ' → ' + formatVersion(next); }
+		} catch { label += ' · Update check unavailable'; }
+		if (current === panel) {
+			await current.webview.postMessage({ agentUpdate: { id, installed: versionKey(installed), label, target } });
+		}
+	}
+
+	async function notifyUpdates() {
+		const available = await Promise.all(agentIds.map(async id => {
+			try {
+				const launch = await store.launch(id);
+				if (!launch?.release) { return; }
+				const next = await store.availableUpdate(id, launch.release);
+				if (!next) { return; }
+				const key = 'agentUpdateNotice.' + (vscode.env.remoteAuthority ?? 'local') + '.' + id;
+				if (context.globalState.get(key) === versionKey(next)) { return; }
+				return { id, key, target: versionKey(next) };
+			} catch { return; }
+		}));
+		const updates = available.filter(item => !!item);
+		if (!updates.length) { return; }
+		await Promise.all(updates.map(item => context.globalState.update(item.key, item.target)));
+		const names = updates.map(item => agents[item.id].name).join(', ');
+		if (await vscode.window.showInformationMessage('Agent updates available: ' + names, 'View updates')) {
+			await vscode.commands.executeCommand('otrion.settings.open', updates.length === 1 ? updates[0].id : 'agents');
+		}
+	}
+	const startupCheck = setTimeout(() => { void notifyUpdates(); }, 15_000);
+	const updateCheck = setInterval(() => { void notifyUpdates(); if (panel?.visible) { void refresh(); } }, 3_600_000);
+	context.subscriptions.push({ dispose() { clearTimeout(startupCheck); clearInterval(updateCheck); } });
+
 	async function refresh(ids = agentIds) {
 		clearTimeout(loginRefresh);
 		const current = panel;
@@ -32,7 +71,7 @@ export function registerSettings(context: vscode.ExtensionContext, store: AgentS
 			const choice = await store.authChoice(id);
 			const auth = choice.mode === 'cli' && launch && allowed(id) ? await store.authStatus(id, launch) : undefined;
 			const authenticated = auth === 'Signed in' || auth === 'Provider configured' || auth === 'CLI credentials configured' || auth === 'CLI API key';
-			return { id, auth, authenticated, ...choice, installed, source: launch?.source, availability: launch?.source ?? missing, installIssue: installIssue(id), allowed: allowed(id), installing: installing.has(id), signingIn: changingAuth.has(id) || loginTerminals.has(id), error: errors.get(id) };
+			return { id, release: launch?.release, version: launch?.release && versionKey(launch.release), versionLabel: launch?.release && formatVersion(launch.release), trusted: vscode.workspace.isTrusted, auth, authenticated, ...choice, installed, source: launch?.source, availability: launch?.source ?? missing, installIssue: installIssue(id), allowed: allowed(id), installing: installing.has(id), signingIn: changingAuth.has(id) || loginTerminals.has(id), error: errors.get(id) };
 		}));
 		if (panel === current && currentPage === 'agents' && sequence === revision) {
 			for (const row of rows) {
@@ -50,6 +89,9 @@ export function registerSettings(context: vscode.ExtensionContext, store: AgentS
 				}, 4000);
 			}
 			await current.webview.postMessage({ rows, remote, location: agentLocation() });
+			for (const row of rows) {
+				if (row.release) { void showVersion(current, row.id, row.release); }
+			}
 		}
 	}
 
@@ -60,12 +102,17 @@ export function registerSettings(context: vscode.ExtensionContext, store: AgentS
 				if (changingAuth.has(id)) { return; }
 				changingAuth.add(id);
 				try { await store.changeAuth(id, action); } finally { changingAuth.delete(id); }
-			} else if (action === 'install') {
+			} else if (action === 'checkUpdate') {
+				const launch = await store.launch(id);
+				if (panel && launch?.release) { await showVersion(panel, id, launch.release, true); }
+				return;
+			} else if (action === 'install' || (action === 'update' && typeof value === 'string')) {
 				if (installing.has(id)) { return; }
 				installing.add(id);
 				void refresh();
 				try {
-					await store.install(id);
+					if (action === 'update') { await store.update(id, value as string); }
+					else { await store.install(id); }
 					onSetup(id);
 				} finally { installing.delete(id); }
 			} else if (action === 'allow' && typeof value === 'boolean') {
@@ -168,12 +215,14 @@ export function registerSettings(context: vscode.ExtensionContext, store: AgentS
 				<span class="agent-icon" aria-hidden="true"></span>
 				<div class="agent-info">
 					<h3 id="${id}-name">${agent.name}</h3><p class="agent-description" title="${agent.description}">${agent.description}</p><span class="auth" role="status"></span>
+					<div class="agent-release" hidden><span class="release-label"></span> <button class="auth-action" data-action="update" hidden>Update</button></div>
 				</div>
 				<button class="primary" disabled>Checking…</button>
 				<span class="enabled" hidden>Enabled</span>
 				<button class="more" popovertarget="${id}-menu" aria-label="More actions for ${agent.name}" title="More actions" disabled>•••</button>
 				<div class="menu" id="${id}-menu" popover>
 					<button data-action="install">Install Otrion-managed adapter</button>
+					<button data-action="checkUpdate" hidden>Check for updates</button>
 					${keySupported ? '<button data-action="key">Set up API key</button>' : ''}
 					<button data-action="guide">Provider setup guide</button>
 					<button data-action="disable">Disable</button>

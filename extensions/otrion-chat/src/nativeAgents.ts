@@ -8,6 +8,7 @@ import * as path from 'node:path';
 import { pipeline } from 'node:stream/promises';
 import { promisify } from 'node:util';
 
+import type { AgentArchive } from './agentUpdates';
 
 export const nativeVersions = { cursor: '2026.11.19-f005e9d', goose: '1.60.2' } as const;
 type NativeAgent = keyof typeof nativeVersions;
@@ -52,7 +53,7 @@ export async function downloadVerified(id: string, staging: string, url: string,
 	return file;
 }
 
-export async function installNative(id: NativeAgent, staging: string) {
+export async function installNative(id: NativeAgent, staging: string, update?: AgentArchive) {
 	let target = process.platform + '-' + process.arch;
 	if (id === 'goose' && process.platform === 'linux') {
 		const report = process.report.getReport() as { header: { glibcVersionRuntime?: string } };
@@ -61,7 +62,7 @@ export async function installNative(id: NativeAgent, staging: string) {
 	const archive = archives[id][target];
 	if (!archive) { throw new Error('No ' + id + ' release for ' + target + '.'); }
 	const [url, digest] = archive;
-	const file = await downloadVerified(id, staging, url, 'sha256', digest);
+	const file = await downloadVerified(id, staging, update?.url ?? url, 'sha256', update?.digest ?? digest);
 	// Windows ships bsdtar, which also extracts ZIP releases.
 	await promisify(execFile)('tar', ['-xf', file, '-C', staging], { windowsHide: true });
 	await unlink(file);
