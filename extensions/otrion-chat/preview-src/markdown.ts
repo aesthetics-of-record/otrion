@@ -45,6 +45,8 @@ export function render(source: string, copyButton: (text: string) => HTMLButtonE
 		const href = link.getAttribute('href')!;
 		link.addEventListener('click', e => {
 			e.preventDefault();
+			// The webview host also opens anchor clicks that bubble up to its window.
+			e.stopPropagation();
 			if (href.startsWith('#')) {
 				try { headings.get(decodeURIComponent(href.slice(1)))?.scrollIntoView({ block: 'nearest' }); }
 				catch { /* Ignore malformed fragment escapes. */ }
