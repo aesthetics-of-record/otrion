@@ -285,16 +285,21 @@ function leaveContextView() {
 	clearTimeout(contextTimer);
 	if (!contextPinned && !contextPanel.hidden) { showPanel(); }
 }
-window.addEventListener('blur', leaveContextView);
+window.addEventListener('blur', () => {
+	if (!element('model-panel').hidden) { showPanel(); }
+	else { leaveContextView(); }
+});
 document.addEventListener('mouseout', event => { if (!event.relatedTarget) { leaveContextView(); } });
 contextButton.addEventListener('click', () => {
 	const open = !contextPinned;
 	showPanel(open ? 'context' : undefined);
 	contextPinned = open;
 });
-document.addEventListener('click', event => {
-	if (event.target instanceof Element && !event.target.closest('.popover, #model, #mode, #context, #input, #home-new')) { showPanel(); }
-});
+document.addEventListener('pointerdown', event => {
+	if (!(event.target instanceof Element) || event.target.closest('.popover, #model, #mode, #context, #home-new')) { return; }
+	if (input.contains(event.target) && element('model-panel').hidden && element('mode-panel').hidden) { return; }
+	showPanel();
+}, true);
 document.addEventListener('keydown', event => {
 	if (event.key === 'Escape') {
 		if (!choicePanel.hidden) { choiceTrigger?.focus(); closeChoices(); return; }

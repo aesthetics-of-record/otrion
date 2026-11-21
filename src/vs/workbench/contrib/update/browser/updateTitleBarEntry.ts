@@ -195,6 +195,9 @@ export class UpdateTitleBarContribution extends Disposable implements IWorkbench
 					}
 				}
 				break;
+			case StateType.AvailableForDownload:
+				showTooltip = true;
+				break;
 			case StateType.Idle:
 				showTooltip = !!this.state.error;
 				break;
