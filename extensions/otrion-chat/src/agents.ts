@@ -6,9 +6,10 @@ import { access, open, mkdir, mkdtemp, rename, rm, stat } from 'node:fs/promises
 import * as path from 'node:path';
 import { homedir } from 'node:os';
 import { createRequire } from 'node:module';
-import { promisify } from 'node:util';
+import { promisify, stripVTControlCharacters } from 'node:util';
 import * as vscode from 'vscode';
 
+import { AcpClient } from './acp';
 import { antigravityVersion, configureAntigravityKeyProfile, installAntigravity } from './antigravity';
 import { agents, agentIds, type AgentId } from './agentCatalog';
 export { agents, isAgent, type AgentId } from './agentCatalog';
@@ -128,6 +129,22 @@ async function localNpmCommand(node: string): Promise<Command | undefined> {
 		if (await fileExists(cli)) { return { command: node, args: [cli] }; }
 	}
 	return undefined;
+}
+
+function providerAccountStatus(id: 'opencode' | 'kilo', stdout: string, stderr: string) {
+	if (id === 'opencode') {
+		const entries: unknown = JSON.parse(stdout);
+		if (!Array.isArray(entries) || !entries.every(entry => Array.isArray(entry?.connections))) { return 'Unknown'; }
+		const connections = entries.flatMap(entry => entry.connections as { type: string; method?: string }[]);
+		if (connections.some(connection => connection.type === 'credential' && connection.method === 'oauth')) { return 'Signed in'; }
+		return connections.length ? 'Provider configured' : 'No provider credentials';
+	}
+	const lines = stripVTControlCharacters(stdout + '\n' + stderr);
+	const count = lines.match(/^\s*└\s+(\d+) credentials?\s*$/m);
+	if (!count) { return 'Unknown'; }
+	if (Number(count[1]) > 0 && /^●\s+.+\s+oauth\s*$/m.test(lines)) { return 'Signed in'; }
+	const environment = lines.match(/^\s*└\s+(\d+) environment variables?\s*$/m);
+	return Number(count[1]) > 0 || Number(environment?.[1]) > 0 ? 'Provider configured' : 'No provider credentials';
 }
 
 export class AgentStore {
@@ -277,7 +294,19 @@ export class AgentStore {
 
 	async authStatus(id: AgentId, launch: NonNullable<Awaited<ReturnType<AgentStore['launch']>>>) {
 		if (!vscode.workspace.isTrusted) { return 'Unknown'; }
-		if (!originalAgent(id)) { return undefined; }
+		if (id === 'kilo' || id === 'opencode') {
+			const args = [...launch.baseArgs, 'auth', 'list'];
+			if (id === 'opencode') { args.push('--format', 'json', '--standalone'); }
+			try {
+				const { stdout, stderr } = await promisify(execFile)(launch.command, args, { cwd: homedir(),
+					env: { ...process.env, ...launch.env, NO_COLOR: '1' }, timeout: 10000, maxBuffer: 1_048_576, windowsHide: true });
+				return providerAccountStatus(id, stdout, stderr);
+			} catch { return 'Unknown'; }
+		}
+		if (!originalAgent(id)) {
+			const client = new AcpClient(id, launch.command, launch.args, homedir(), { ...process.env, ...launch.env }, () => {});
+			try { return await client.accountStatus(vscode.version); } finally { client.dispose(); }
+		}
 		let output: string;
 		try {
 			const cli = await this.authCommand(id, launch);
