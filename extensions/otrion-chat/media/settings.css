@@ -87,7 +87,7 @@ button:disabled { opacity: .55; cursor: default; }
 .gallery-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; padding-top: 12px; border-top: 1px solid var(--line); }
 .gallery-actions button { min-height: 28px; padding: 3px 10px; }
 .gallery-actions button:not(.primary):hover { background: var(--vscode-toolbar-hoverBackground); }
-#gallery-status, .auth, .auth-note { color: var(--muted); font-size: var(--small); }
+#gallery-status, .auth, .auth-note, .agent-release { color: var(--muted); font-size: var(--small); }
 #gallery-status:empty, .auth:empty { display: none; }
 @container (max-width: 440px) {
 	#gallery { grid-template-columns: minmax(0, 1fr); gap: 6px; padding: 12px; }

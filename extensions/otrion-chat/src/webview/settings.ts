@@ -41,7 +41,7 @@
 			button.disabled = true;
 			host.postMessage(action === 'enable' || action === 'disable'
 				? { id: section.id, action: 'allow', value: action === 'enable' }
-				: { id: section.id, action });
+				: { id: section.id, action, value: button.dataset.target });
 		});
 	}
 	const gallery = document.querySelector<HTMLFormElement>('#gallery')!;
@@ -76,10 +76,32 @@
 			document.getElementById('gallery-status')!.textContent = data.notice;
 			reload.hidden = !data.saved;
 		}
+		if (data.agentUpdate) {
+			const { id, installed, label, target } = data.agentUpdate;
+			const section = document.getElementById(id);
+			if (section && section.dataset.version === installed) {
+				section.querySelector('.release-label')!.textContent = label;
+				const button = section.querySelector<HTMLButtonElement>('[data-action="update"]')!;
+				button.dataset.target = target ?? '';
+				button.hidden = !target;
+				section.querySelector<HTMLButtonElement>('[data-action="checkUpdate"]')!.disabled = false;
+			}
+		}
 		if (!data.rows) { return; }
 		for (const row of data.rows) {
 			const section = document.getElementById(row.id)!;
 			const primary = section.querySelector<HTMLButtonElement>('.primary')!;
+			const update = section.querySelector<HTMLButtonElement>('[data-action="update"]')!;
+			const release = section.querySelector<HTMLElement>('.agent-release')!;
+			release.hidden = !row.version && row.source !== 'External installation';
+			if (section.dataset.version !== (row.version ?? '') || !row.version) {
+				section.dataset.version = row.version ?? '';
+				update.hidden = true;
+				release.querySelector('.release-label')!.textContent = row.versionLabel ?? 'Updated by your external installer';
+			}
+			update.disabled = row.installing || !row.trusted;
+			update.textContent = row.installing ? 'Updating…' : 'Update';
+			update.title = row.trusted ? 'Install this release for new sessions' : 'Trust this workspace to update';
 			const enabled = !!row.source && row.allowed;
 			const auth = section.querySelector<HTMLElement>('.auth')!;
 			const byok = row.mode === 'key';
@@ -112,7 +134,8 @@
 			const menu = section.querySelector<HTMLElement>('.menu')!;
 			for (const item of menu.querySelectorAll<HTMLButtonElement>('button')) {
 				item.disabled = false;
-				item.hidden = item.dataset.action === 'install' ? !row.source || row.installed || row.installing || !!row.installIssue
+				item.hidden = item.dataset.action === 'checkUpdate' ? !row.version || row.installing
+					: item.dataset.action === 'install' ? !row.source || row.installed || row.installing || !!row.installIssue
 					: item.dataset.action === 'key' ? enabled || byok
 					: item.dataset.action === 'disable' && !row.allowed;
 			}

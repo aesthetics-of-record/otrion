@@ -14,6 +14,21 @@ const { pathToFileURL } = require('node:url');
 const extension = path.resolve(process.env.OTRION_CHAT_TEST_EXTENSION ?? path.join(__dirname, '..'));
 const windows = process.platform === 'win32';
 
+test('Managed versions retain prior installations and order Pi and Cursor releases', () => {
+	const { agentIds } = require(path.join(extension, 'out', 'agentCatalog.js'));
+	const { bundledVersion, parseInstalledVersion, versionKey, isNewer } = require(path.join(extension, 'out', 'agentUpdates.js'));
+	for (const id of agentIds) {
+		const release = bundledVersion(id);
+		assert.deepEqual(parseInstalledVersion(id, versionKey(release)), release);
+		assert.equal(parseInstalledVersion(id, 'install-tmp'), undefined);
+		assert.equal(isNewer(id, release, release), false);
+	}
+	assert.equal(isNewer('pi', { version: '0.0.34', runtime: '1.10.0' }, { version: '0.0.34', runtime: '1.9.0' }), true);
+	assert.equal(isNewer('pi', { version: '0.0.35', runtime: '1.5.0' }, { version: '0.0.34', runtime: '1.6.0' }), false);
+	assert.equal(isNewer('grok', { version: '1.0.92' }, { version: '1.0.93' }), false);
+	assert.equal(isNewer('cursor', { version: '2026.11.20-00aabbb' }, { version: '2026.11.19-fffffff' }), true);
+});
+
 test('Antigravity checks the native download and isolates Gemini key settings', async () => {
 	const { configureAntigravityKeyProfile, installAntigravity } = require(path.join(extension, 'out', 'antigravity.js'));
 	const home = await fs.mkdtemp(path.join(os.tmpdir(), 'otrion-agy-test-'));
@@ -430,7 +445,13 @@ async function testManagedInstall(root, store, agents, mock, installIssue) {
 			fs.mkdirSync(bin, {recursive: true});
 			fs.copyFileSync('bin/grok', path.join(bin, 'grok-${agent.npm.version}${windows ? '.exe' : ''}'));` : '';
 		await fs.writeFile(path.join(pkg, 'record-runtime.js'), record + ';' + install);
-		await fs.writeFile(entry, '#!/usr/bin/env node\nconsole.log(process.execPath)');
+		const probe = agent.binary === 'cline' ? `if (process.env.OTRION_TEST_UPDATE_PROBE) {
+			require('node:readline').createInterface({ input: process.stdin }).on('line', line => {
+				const { id } = JSON.parse(line);
+				console.log(JSON.stringify({ jsonrpc: '2.0', id, result: { protocolVersion: 1 } }));
+			});
+		} else ` : '';
+		await fs.writeFile(entry, '#!/usr/bin/env node\n' + probe + 'console.log(process.execPath)');
 		const { stdout } = await promisify(execFile)(process.execPath, [npm, 'pack', '--json', '--ignore-scripts', '--cache', path.join(root, 'cache')], { cwd: pkg });
 		const [{ filename, integrity }] = JSON.parse(stdout);
 		files.set(name, { version: agent.npm.version, integrity, tar: await fs.readFile(path.join(pkg, filename)) });
@@ -476,6 +497,30 @@ async function testManagedInstall(root, store, agents, mock, installIssue) {
 			const result = await promisify(execFile)(launch.command, launch.args, { env });
 			assert.equal(result.stdout.trim(), process.execPath);
 			await store.install(id); // already installed
+		}
+		if (!installIssue('cline')) {
+			const { AgentStore } = require(path.join(extension, 'out', 'agents.js'));
+			const managed = path.join(root, 'managed');
+			const version = agents.cline.npm.version;
+			const current = path.join(managed, 'cline-' + version);
+			const old = path.join(managed, 'cline-0.0.1');
+			await fs.rename(current, old);
+			const updates = new AgentStore(managed, {}, async () => ({ version }));
+			const before = await updates.launch('cline');
+			assert.deepEqual(await updates.availableUpdate('cline', before.release), { version });
+			await assert.rejects(fs.access(current), { code: 'ENOENT' });
+			await assert.rejects(updates.update('cline', version), /invalid JSON/);
+			assert.equal((await updates.launch('cline')).directory, old);
+			const originalProbe = process.env.OTRION_TEST_UPDATE_PROBE;
+			try {
+				process.env.OTRION_TEST_UPDATE_PROBE = '1';
+				await Promise.all([updates.update('cline', version), updates.update('cline', version)]);
+			} finally {
+				if (originalProbe === undefined) { delete process.env.OTRION_TEST_UPDATE_PROBE; }
+				else { process.env.OTRION_TEST_UPDATE_PROBE = originalProbe; }
+			}
+			assert.equal((await store.launch('cline')).directory, current);
+			await fs.access(before.args[0]);
 		}
 	} finally {
 		if (oldRegistry === undefined) { delete process.env.npm_config_registry; } else { process.env.npm_config_registry = oldRegistry; }

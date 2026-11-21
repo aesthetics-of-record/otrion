@@ -2,6 +2,7 @@
 
 import { spawn, type ChildProcessWithoutNullStreams } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
+import { once } from 'node:events';
 import { isAbsolute } from 'node:path';
 import { createInterface, type Interface } from 'node:readline';
 
@@ -142,6 +143,17 @@ export class AcpClient {
 		this.supportsSteering = result._meta?.steering?.supported === true;
 		this.supportsImages = result.agentCapabilities?.promptCapabilities?.image === true;
 		return result;
+	}
+
+	async checkProtocol(version: string) {
+		try { await this.#initialize(version); }
+		finally {
+			// Windows cannot move the staged release while its executable is open.
+			const exited = process.platform === 'win32' && !this.#closed
+				? once(this.#process, 'close', { signal: AbortSignal.timeout(5000) }) : undefined;
+			this.dispose();
+			await exited;
+		}
 	}
 
 	async accountStatus(version: string) {
