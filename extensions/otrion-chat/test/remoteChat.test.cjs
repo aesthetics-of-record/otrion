@@ -72,6 +72,13 @@ test('Settings probes use the authentication signal for each ACP agent', async (
 			lookup({ code, data: {}, message: 'Unrelated error' }),
 		]), ['Signed in', 'Signed out', 'Unknown']);
 	}
+	const goose = (defaults, entries) => probe('goose', {}, success, {
+		'_goose/unstable/defaults/read': { result: defaults }, '_goose/unstable/providers/list': { result: { entries } },
+	});
+	const defaults = { providerId: 'openai', modelId: 'gpt-4o' };
+	assert.deepEqual(await Promise.all([goose({}, []), goose(defaults, [{ providerId: 'openai', configured: true }]),
+		goose(defaults, [{ providerId: 'openai', configured: false }]), goose(defaults, [])]),
+		['Provider setup required', 'Provider configured', 'Provider setup required', 'Unknown']);
 	const preflight = (state, hasToken) => probe('qwen-code', {}, success, { 'qwen/status/workspace/preflight': {
 		result: { cells: [{ kind: 'auth', status: state, detail: { hasToken } }] }
 	} });
@@ -181,10 +188,13 @@ test('Remote SSH agents use the host runtime, credentials and file paths', async
 		assert.equal(isAgent('toString'), false);
 		assert.equal(isAgent('gemini'), false);
 		assert.equal(allowed('grok'), false);
-		assert.deepEqual(Object.keys(agents).filter(supportsKey).sort(), ['antigravity', 'claude', 'cline', 'codex', 'grok']);
+		assert.deepEqual(Object.keys(agents).filter(supportsKey).sort(), ['antigravity', 'claude', 'cline', 'codex', 'cursor', 'grok']);
 		credentials.set('agent-auth.remote.ssh-remote+test.opencode', JSON.stringify({ mode: 'key', key: 'old-key' }));
 		assert.deepEqual(await store.authChoice('opencode'), { mode: 'cli', hasKey: false });
 		for (const [id, output, expected] of [
+			['cursor', '{"status":"unauthenticated","isAuthenticated":false}', 'Signed out'],
+			['cursor', '{"status":"authenticated","isAuthenticated":true}', 'Signed in'],
+			['cursor', 'Service unavailable', 'Unknown'],
 			['opencode', '[]', 'No provider credentials'],
 			['opencode', '[{"connections":[{"type":"credential","method":"oauth"}]}]', 'Signed in'],
 			['opencode', '[{"connections":[{"type":"env","name":"OPENAI_API_KEY"}]}]', 'Provider configured'],
@@ -194,7 +204,7 @@ test('Remote SSH agents use the host runtime, credentials and file paths', async
 			['kilo', '└  0 credentials\n└  1 environment variable', 'Provider configured'],
 			['kilo', 'Unexpected output', 'Unknown'],
 		]) {
-			const cli = { command: process.execPath, args: [], baseArgs: ['-e', 'console.log(process.env.FIXTURE)', '--'], env: { FIXTURE: output } };
+			const cli = { command: process.execPath, args: [], baseArgs: ['-e', 'console.log(process.env.FIXTURE)', '--'], env: { FIXTURE: output, CURSOR_API_KEY: '' } };
 			assert.equal(await store.authStatus(id, cli), expected);
 		}
 		const executable = `
@@ -404,7 +414,9 @@ async function testManagedInstall(root, store, agents, mock, installIssue) {
 	mock.env.appRoot = appRoot;
 	const npm = path.join(npmDir, 'bin', 'npm-cli.js');
 	const files = new Map();
-	for (const agent of Object.values(agents).filter(agent => agent.npm)) {
+	const { piRuntime } = require(path.join(extension, 'out', 'agentCatalog.js'));
+	const packages = [...Object.values(agents).filter(agent => agent.npm), { binary: 'pi', npm: piRuntime }];
+	for (const agent of packages) {
 		const pkg = path.join(root, agent.binary);
 		const entry = path.join(pkg, agent.npm.entry);
 		await fs.mkdir(path.dirname(entry), { recursive: true });
@@ -456,7 +468,7 @@ async function testManagedInstall(root, store, agents, mock, installIssue) {
 			const profile = agents[id];
 			assert.deepEqual(launch.args.slice(1), profile.args ?? []);
 			if (id !== 'grok') {
-				const directory = id + '-' + profile.npm.version;
+				const directory = id + '-' + profile.npm.version + (id === 'pi' ? '-' + piRuntime.version : '');
 				const pkg = path.join(root, 'managed', directory, 'node_modules', profile.npm.package);
 				assert.equal(await fs.readFile(path.join(pkg, 'install-runtime'), 'utf8'), process.execPath);
 			}

@@ -11,7 +11,8 @@ import * as vscode from 'vscode';
 
 import { AcpClient } from './acp';
 import { antigravityVersion, configureAntigravityKeyProfile, installAntigravity } from './antigravity';
-import { agents, agentIds, type AgentId } from './agentCatalog';
+import { nativeVersions, nativeEntry, installNative } from './nativeAgents';
+import { agents, agentIds, piRuntime, type AgentId } from './agentCatalog';
 export { agents, isAgent, type AgentId } from './agentCatalog';
 
 export function agentLocation() {
@@ -24,6 +25,10 @@ function originalAgent(id: AgentId) { return id === 'codex' || id === 'claude'; 
 export function supportsKey(id: AgentId) { return originalAgent(id) || !!agents[id].keyEnv; }
 
 export function installIssue(id: AgentId) {
+	if (id === 'cursor' && process.platform === 'linux') {
+		const report = process.report.getReport() as { header: { glibcVersionRuntime?: string } };
+		if (!report.header.glibcVersionRuntime) { return 'Cursor CLI requires a glibc-based Linux host.'; }
+	}
 	const platforms = agents[id].platforms;
 	const host = process.platform + '-' + process.arch;
 	return platforms && !platforms.includes(host) ? 'The provider does not publish a binary for ' + host + '.' : undefined;
@@ -214,6 +219,8 @@ export class AgentStore {
 				delete env.AGY_ADC_AUTH;
 			} else if (id === 'grok') {
 				env.GROK_HOME = path.join(this.root, 'grok-api-key');
+			} else if (id === 'cursor') {
+				delete env.CURSOR_AUTH_TOKEN;
 			} else if (id === 'cline') {
 				env.CLINE_PROVIDER = 'cline';
 			}
@@ -242,10 +249,11 @@ export class AgentStore {
 
 	private installation(id: AgentId) {
 		const npm = agents[id].npm;
-		const version = id === 'antigravity' ? antigravityVersion : npm!.version;
-		const directory = path.join(this.root, id + '-' + version);
+		const version = id === 'antigravity' ? antigravityVersion : id === 'cursor' || id === 'goose' ? nativeVersions[id] : npm!.version;
+		const directory = path.join(this.root, id + '-' + version + (id === 'pi' ? '-' + piRuntime.version : ''));
 		const binary = agents[id].binary + (process.platform === 'win32' ? '.exe' : '');
-		const entry = id === 'grok' || !npm ? binary : path.join('node_modules', npm.package, npm.entry);
+		const entry = id === 'goose' || id === 'cursor' ? nativeEntry(id)
+			: id === 'grok' || !npm ? binary : path.join('node_modules', npm.package, npm.entry);
 		return { directory, entry };
 	}
 
@@ -262,9 +270,21 @@ export class AgentStore {
 		const env: NodeJS.ProcessEnv = { ...(remote ? remoteRuntimePath() : {}), ...agent.env };
 		let base: Command | undefined;
 		if (install) {
-			base = await packageCommand(path.join(install.directory, install.entry), remote);
+			base = await this.managedCommand(id, install.directory, install.entry, remote, env);
 		} else {
 			base = await resolveCommand(setting, agent.npm?.package, agent.npm?.entry);
+			if (!base && id === 'cursor' && process.platform === 'win32') {
+				const script = setting === agent.binary
+					? path.join(process.env.LOCALAPPDATA || path.join(homedir(), 'AppData', 'Local'), 'cursor-agent', 'cursor-agent.ps1')
+					: path.isAbsolute(setting) && /cursor-agent\.(cmd|ps1)$/i.test(setting) ? setting.replace(/\.cmd$/i, '.ps1') : undefined;
+				if (script && await fileExists(script)) {
+					const powershell = path.join(process.env.SystemRoot || 'C:\\Windows', 'System32', 'WindowsPowerShell', 'v1.0', 'powershell.exe');
+					base = { command: powershell, args: ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', script] };
+				}
+			}
+			if (!base && (id === 'cursor' || id === 'goose') && setting === agent.binary && process.platform !== 'win32') {
+				base = await resolveCommand(path.join(homedir(), '.local', 'bin', agent.binary));
+			}
 			if (!base && id === 'antigravity' && setting === agent.binary) {
 				const installedPath = process.platform === 'win32'
 					? path.join(process.env.LOCALAPPDATA || path.join(homedir(), 'AppData', 'Local'), 'agy', 'bin', 'agy.exe')
@@ -275,6 +295,32 @@ export class AgentStore {
 		if (!base) { return undefined; }
 		return { ...base, baseArgs: base.args, args: [...base.args, ...(agent.args ?? [])], env,
 			directory: install?.directory, source: install ? 'Installed by Otrion' : 'External installation' };
+	}
+
+	private async managedCommand(id: AgentId, directory: string, relativeEntry: string, remote: boolean, env: NodeJS.ProcessEnv) {
+		let base: Command | undefined;
+		const entry = path.join(directory, relativeEntry);
+		if (id === 'cursor' && process.platform === 'win32') {
+			base = { command: entry, args: [path.join(path.dirname(entry), 'index.js')] };
+			env.CURSOR_INVOKED_AS = 'cursor-agent.cmd';
+		} else {
+			base = await packageCommand(entry, remote);
+		}
+		if (id === 'cursor' && base) { base.args.push('--disable-auto-update'); }
+		if (id === 'antigravity') { env.AGY_CLI_DISABLE_AUTO_UPDATE = '1'; }
+		if (id === 'pi') {
+			const shim = process.platform === 'win32' ? 'pi.cmd' : 'pi';
+			env.PI_ACP_PI_COMMAND = path.join(directory, 'node_modules', '.bin', shim);
+		}
+		return base;
+	}
+
+	private async piCommand(launch: NonNullable<Awaited<ReturnType<AgentStore['launch']>>>) {
+		if (launch.directory) {
+			const entry = path.join(launch.directory, 'node_modules', piRuntime.package, piRuntime.entry);
+			return { command: launch.command, args: [entry] };
+		}
+		return resolveCommand(process.env.PI_ACP_PI_COMMAND || 'pi', piRuntime.package, piRuntime.entry);
 	}
 
 	private async authCommand(id: AgentId, launch: NonNullable<Awaited<ReturnType<AgentStore['launch']>>>) {
@@ -294,6 +340,30 @@ export class AgentStore {
 
 	async authStatus(id: AgentId, launch: NonNullable<Awaited<ReturnType<AgentStore['launch']>>>) {
 		if (!vscode.workspace.isTrusted) { return 'Unknown'; }
+		if (id === 'cursor' || id === 'pi') {
+			if (id === 'cursor' && (launch.env.CURSOR_API_KEY ?? process.env.CURSOR_API_KEY)?.trim()) { return 'CLI API key'; }
+			const cli = id === 'pi' ? await this.piCommand(launch) : { command: launch.command, args: launch.baseArgs };
+			if (!cli) { return 'Pi runtime required'; }
+			const args = id === 'pi' ? [...cli.args, '--list-models'] : [...cli.args, 'status', '--format', 'json'];
+			let output: string;
+			try {
+				const result = await promisify(execFile)(cli.command, args, { cwd: homedir(), env: { ...process.env, ...launch.env, NO_COLOR: '1' }, timeout: 10_000, windowsHide: true });
+				output = id === 'cursor' ? result.stdout : result.stdout + '\n' + result.stderr;
+			} catch (error) {
+				if (error.code !== 1) { return 'Unknown'; }
+				output = id === 'cursor' ? error.stdout ?? '' : (error.stdout ?? '') + '\n' + (error.stderr ?? '');
+			}
+			output = stripVTControlCharacters(output);
+			if (id === 'pi') {
+				if (/^provider\s+model\s+context\s+/im.test(output)) { return 'Provider configured'; }
+				return /No models available/i.test(output) ? 'No provider credentials' : 'Unknown';
+			}
+			try {
+				const account = JSON.parse(output);
+				if (account.status === 'authenticated' && account.isAuthenticated === true) { return 'Signed in'; }
+				return account.status === 'unauthenticated' && account.isAuthenticated === false ? 'Signed out' : 'Unknown';
+			} catch { return 'Unknown'; }
+		}
 		if (id === 'kilo' || id === 'opencode') {
 			const args = [...launch.baseArgs, 'auth', 'list'];
 			if (id === 'opencode') { args.push('--format', 'json', '--standalone'); }
@@ -331,6 +401,15 @@ export class AgentStore {
 	async signIn(id: AgentId) {
 		const launch = await this.launch(id);
 		if (!launch || !allowed(id)) { throw new Error('Install and allow this agent first.'); }
+		if (id === 'pi') {
+			if (!vscode.workspace.isTrusted) { throw new Error('Open a trusted workspace to configure Pi.'); }
+			const cli = await this.piCommand(launch);
+			if (!cli) { throw new Error('Install the Pi runtime or use the Otrion-managed adapter.'); }
+			const terminal = vscode.window.createTerminal({ name: 'Pi provider setup', shellPath: cli.command, shellArgs: cli.args, env: launch.env,
+				message: 'In Pi, enter /login to configure a model provider.', cwd: vscode.Uri.file(homedir()) });
+			terminal.show();
+			return terminal;
+		}
 		if (!originalAgent(id)) {
 			const { signInWithAgent } = await import('./agentAuth');
 			return signInWithAgent(id, launch);
@@ -361,6 +440,7 @@ export class AgentStore {
 		const args = [...npm.args, 'install', '--prefix', staging, '--global=false', '--include=optional', '--no-save', '--no-package-lock', '--no-audit', '--no-fund'];
 		if (remote) { args.push('--cache', path.join(this.root, 'npm-cache')); }
 		args.push(agents[id].npm!.package + '@' + agents[id].npm!.version);
+		if (id === 'pi') { args.push('--engine-strict', piRuntime.package + '@' + piRuntime.version); }
 		const env = { ...process.env, ...(remote ? remoteRuntimePath() : {}) };
 		if (id === 'grok') { env.GROK_HOME = path.join(staging, 'cli'); }
 		await promisify(execFile)(npm.command, args, { cwd: staging, env,
@@ -383,6 +463,7 @@ export class AgentStore {
 		const staging = await mkdtemp(path.join(this.root, id + '-install-'));
 		try {
 			if (agents[id].npm) { await this.installNpm(id, staging); }
+			else if (id === 'cursor' || id === 'goose') { await installNative(id, staging); }
 			else { await installAntigravity(staging); }
 			if (!await fileExists(path.join(staging, install.entry))) { throw new Error('The downloaded adapter is missing its entry point.'); }
 			try {

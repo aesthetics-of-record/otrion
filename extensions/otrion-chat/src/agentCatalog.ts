@@ -13,6 +13,8 @@ interface AgentProfile {
 	platforms?: readonly string[];
 }
 
+export const piRuntime = { package: '@earendil-works/pi-coding-agent', version: '1.6.0', entry: 'dist/bundle/cli.js' };
+
 const nativePlatforms = ['darwin-x64', 'darwin-arm64', 'linux-x64', 'linux-arm64', 'win32-x64', 'win32-arm64'];
 
 // These IDs also identify saved chat sessions. Keep them stable across display-name changes.
@@ -48,6 +50,13 @@ const catalog = {
 		website: 'https://github.com/agentclientprotocol/codex-acp',
 		npm: { package: '@agentclientprotocol/codex-acp', version: '2.7.0', entry: 'dist/index.js' },
 	},
+	cursor: {
+		name: 'Cursor', binary: 'cursor-agent',
+		description: 'Cursor’s coding agent for your workspace.',
+		website: 'https://cursor.com/docs/cli/reference/authentication',
+		args: ['acp'], loginArgs: ['login'], keyEnv: 'CURSOR_API_KEY',
+		platforms: nativePlatforms,
+	},
 	'github-copilot-cli': {
 		name: 'GitHub Copilot', binary: 'copilot',
 		description: 'GitHub’s Copilot coding agent for the terminal.',
@@ -56,6 +65,13 @@ const catalog = {
 		platforms: nativePlatforms,
 		args: ['--acp'],
 		loginArgs: ['login'],
+	},
+	goose: {
+		name: 'Goose', binary: 'goose',
+		description: 'Block’s extensible coding agent for cloud and local models.',
+		website: 'https://block.github.io/goose/',
+		args: ['acp'], loginArgs: ['configure'],
+		platforms: nativePlatforms.filter(platform => platform !== 'win32-arm64'),
 	},
 	grok: {
 		name: 'Grok Build', binary: 'grok',
@@ -85,12 +101,18 @@ const catalog = {
 		loginArgs: ['login'],
 	},
 	opencode: {
-		name: 'OpenCode', binary: 'opencode',
+		name: 'OpenCode V2', binary: 'opencode',
 		description: 'Terminal coding agent that connects to your model provider.',
 		website: 'https://opencode.ai/docs/cli/acp/',
 		npm: { package: '@opencode/cli', version: '2.3.2', entry: 'bin/opencode.exe' },
 		platforms: nativePlatforms,
 		args: ['acp'],
+	},
+	pi: {
+		name: 'Pi', binary: 'pi-acp',
+		description: 'Pi coding agent with a choice of model providers.',
+		website: 'https://github.com/svkozak/pi-acp#authentication-acp-registry-support',
+		npm: { package: 'pi-acp', version: '0.0.34', entry: 'dist/index.js' },
 	},
 	'qwen-code': {
 		name: 'Qwen Code', binary: 'qwen',

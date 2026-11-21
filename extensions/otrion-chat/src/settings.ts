@@ -182,7 +182,7 @@ export function registerSettings(context: vscode.ExtensionContext, store: AgentS
 					${keySupported ? `<div class="auth-method" role="group" aria-label="Authentication for ${agent.name}">
 						<button data-action="cli" title="Use the CLI configuration ${agentLocation()}" disabled>CLI account</button><button data-action="key" disabled>API key</button>
 					</div>` : ''}
-					<button class="auth-action" data-action="login" hidden>Sign in</button>
+					<button class="auth-action" data-action="login" hidden>${id === 'goose' || id === 'pi' ? 'Configure provider' : 'Sign in'}</button>
 					${keySupported ? `<button class="auth-action" data-action="replaceKey" hidden>Replace key</button>
 					<button class="auth-action" data-action="removeKey" hidden>Remove key</button>
 					<p class="auth-note" hidden>Provider API billing applies.</p>` : ''}
