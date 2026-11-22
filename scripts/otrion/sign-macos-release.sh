@@ -60,11 +60,8 @@ record "Otrion $version macOS $VSCODE_ARCH (sign=$sign notarize=$notarize)"
 create_dmg() {
   stage=dmg
   record "Creating disk image"
-  local contents="$AGENT_TEMPDIRECTORY/dmg-contents"
-  mkdir "$contents"
-  ditto "$bundle" "$contents/Otrion.app"
-  ln -s /Applications "$contents/Applications"
-  hdiutil create -srcfolder "$contents" -volname Otrion -fs HFS+ -format UDZO "$dmg"
+  node build/darwin/create-dmg.ts .. "$AGENT_TEMPDIRECTORY"
+  mv "$AGENT_TEMPDIRECTORY/VSCode-darwin-$VSCODE_ARCH.dmg" "$dmg"
 }
 
 if [[ "$sign" == false ]]; then

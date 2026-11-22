@@ -160,7 +160,8 @@ async function main(buildDir?: string, outDir?: string): Promise<void> {
 	const appPath = path.join(appRoot, appName);
 	const dmgName = `VSCode-darwin-${arch}`;
 	const artifactPath = path.join(outDir, `${dmgName}.dmg`);
-	const backgroundPath = path.join(import.meta.dirname, `dmg-background-${quality}.tiff`);
+	const isOtrion = product.darwinBundleIdentifier === 'org.otrion.ide';
+	const backgroundPath = path.join(import.meta.dirname, `dmg-background-${isOtrion ? 'otrion' : quality}.tiff`);
 	const diskIconPath = path.join(root, 'resources', 'darwin', 'code.icns');
 	let title = 'Code OSS';
 	switch (quality) {
@@ -189,7 +190,7 @@ async function main(buildDir?: string, outDir?: string): Promise<void> {
 	}
 
 	// Copy and process the settings template for dmgbuild
-	const settingsTemplatePath = path.join(import.meta.dirname, 'dmg-settings.py.template');
+	const settingsTemplatePath = path.join(import.meta.dirname, isOtrion ? 'dmg-settings-otrion.py.template' : 'dmg-settings.py.template');
 	const settingsFile = path.join(outDir, '.dmg-settings.py');
 	let settingsContent = fs.readFileSync(settingsTemplatePath, 'utf8');
 
@@ -197,12 +198,12 @@ async function main(buildDir?: string, outDir?: string): Promise<void> {
 		.replace('{{VOLUME_NAME}}', JSON.stringify(title))
 		.replace('{{BADGE_ICON}}', JSON.stringify(diskIconPath))
 		.replace('{{BACKGROUND}}', JSON.stringify(backgroundPath))
-		.replace('{{APP_PATH}}', JSON.stringify(appPath))
+		.replace('{{APP_PATH}}', JSON.stringify(path.resolve(appPath)))
 		.replace('{{APP_NAME}}', JSON.stringify(product.nameLong + '.app'));
 	fs.writeFileSync(settingsFile, settingsContent);
 
 	try {
-		await runDmgBuild(settingsFile, dmgName, artifactPath);
+		await runDmgBuild(settingsFile, isOtrion ? product.nameLong : dmgName, artifactPath);
 	} finally {
 		if (fs.existsSync(settingsFile)) {
 			fs.unlinkSync(settingsFile);
