@@ -97,8 +97,6 @@ form:focus-within { border-color: var(--vscode-focusBorder); }
 .controls { display: flex; align-items: center; gap: 4px; margin-top: 5px; min-width: 0; }
 #mode, #model { min-width: 0; height: 24px; padding: 0 6px; border: 0; border-radius: 4px; background: transparent; color: var(--muted); font-size: 11px; line-height: 24px; white-space: nowrap; text-overflow: ellipsis; overflow: hidden; }
 #context { flex: none; margin-left: auto; }
-#context circle { stroke: var(--accent); stroke-width: 2; fill: none; }
-#context .track { stroke: var(--muted); opacity: .4; }
 .primary { flex: none; width: 24px; height: 24px; border-radius: 50%; color: var(--vscode-button-foreground); background: var(--vscode-button-background); }
 .primary:hover:enabled { background: var(--vscode-button-hoverBackground); }
 .primary:disabled { background: var(--vscode-button-secondaryBackground); color: var(--vscode-button-secondaryForeground); }
@@ -108,10 +106,9 @@ form:focus-within { border-color: var(--vscode-focusBorder); }
 .popover h2 { margin: 0 0 8px; font-size: 12px; font-weight: 600; }
 .popover p { font-size: 11px; line-height: 1.5; margin: 8px 0 0; color: var(--muted); }
 #model-options label, .context-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 5px 0; font-size: 12px; }
-#model-options input, #usage-bar { accent-color: var(--accent); }
+#model-options input { accent-color: var(--accent); }
 .context-row span { color: var(--muted); }
 .context-row strong { font-weight: 500; overflow-wrap: anywhere; }
-#usage-bar { width: 100%; height: 5px; }
 @media (max-width: 240px) { #thread { padding: 0 8px; } footer { padding: 0 5px 5px; } .controls { gap: 1px; } }
 #model { anchor-name: --model-trigger; }
 #mode:hover, #model:hover { background: var(--vscode-toolbar-hoverBackground); }

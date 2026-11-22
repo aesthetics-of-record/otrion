@@ -5,6 +5,7 @@ import { randomUUID } from 'node:crypto';
 import { agents, agentLocation, AgentStore, allowed, isAgent, type AgentId } from './agents';
 import { agentIds } from './agentCatalog';
 import { SessionHistory } from './history';
+import { registerUsageStatus } from './usageStatus';
 import { registerSettings } from './settings';
 import { chatHtml } from './chatHtml';
 import { createSession, type SessionRecord } from './chatSession';
@@ -45,6 +46,17 @@ export function activate(context: vscode.ExtensionContext) {
 		const bytes = await vscode.workspace.fs.readFile(vscode.Uri.joinPath(media, id + '.svg'));
 		tabLogos.set(id, Buffer.from(bytes).toString('base64'));
 	})).then(() => { if (tabs.size) { save(); } }, error => console.error('Could not load session icons', error));
+
+	const { refresh: refreshUsage, resetAccount } = registerUsageStatus(context, store, () => enabledAgents, () => {
+		const focused = [...editors].find(([, editor]) => editor.active)?.[0] ?? active;
+		return [...tabs].flatMap(([id, session]) => {
+			const record = records.get(id)!;
+			return session.connected ? [{ id, agent: record.agent, title: title(record), active: id === focused, cost: session.sessionCost }] : [];
+		});
+	}, id => {
+		open(id);
+		if (!editors.has(id)) { void vscode.commands.executeCommand('otrion.chat.focus'); }
+	}, id => tabLogos.get(id));
 
 	let homeRevision = 0;
 	let publishSidebar: (() => void) | undefined;
@@ -136,6 +148,7 @@ export function activate(context: vscode.ExtensionContext) {
 		records.set(record.id, record);
 		const controller = createSession(context, store, record, message => {
 			if (tabs.get(record.id) !== controller) { return; }
+			if (message.type === 'metadata' || message.type === 'state') { refreshUsage(); }
 			const panel = editors.get(record.id);
 			if (panel) { void panel.webview.postMessage(message); }
 			else if (active === record.id || message.type === 'restoreDraft') { void view?.webview.postMessage(message); }
@@ -179,6 +192,7 @@ export function activate(context: vscode.ExtensionContext) {
 	function disposeSession(id: string, keepRecord = false) {
 		tabs.get(id)?.dispose();
 		tabs.delete(id);
+		refreshUsage();
 		drafts.delete(id);
 		if (!keepRecord && !records.get(id)?.messages.length) { records.delete(id); }
 	}
@@ -348,6 +362,7 @@ export function activate(context: vscode.ExtensionContext) {
 		for (const [id, session] of tabs) {
 			if (records.get(id)?.agent === agent) { session.invalidateAuth(); }
 		}
+		resetAccount(agent);
 	}));
 	context.subscriptions.push(vscode.commands.registerCommand('otrion.chat.new', () => requestMenu('new')),
 	vscode.commands.registerCommand('otrion.chat.toggleSessions', () => view?.webview.postMessage({ type: 'toggleSessions' })),
@@ -355,12 +370,17 @@ export function activate(context: vscode.ExtensionContext) {
 	vscode.commands.registerCommand('otrion.chat.activateTab', open),
 	vscode.commands.registerCommand('otrion.chat.closeTab', close),
 	vscode.workspace.onDidGrantWorkspaceTrust(() => {
+		refreshUsage();
 		for (const id of editors.keys()) { void tabs.get(id)?.configure(); }
 		if (active) { void tabs.get(active)?.configure(); } else { empty(); }
 	}), vscode.workspace.onDidChangeConfiguration(e => {
 		if (!e.affectsConfiguration('otrion.chat')) { return; }
 		const previousEnabled = enabledAgents;
 		enabledAgents = new Set(agentIds.filter(allowed));
+		if (e.affectsConfiguration('otrion.chat.agentPaths') || e.affectsConfiguration('otrion.chat.usageProviders')) { resetAccount(); }
+		else if (e.affectsConfiguration('otrion.chat.codexAcpPath')) { resetAccount('codex'); }
+		else if (e.affectsConfiguration('otrion.chat.claudeAcpPath')) { resetAccount('claude'); }
+		else { refreshUsage(); }
 		history.dispose();
 		void view?.webview.postMessage({ type: 'dismissHistory' });
 		for (const [id, tab] of tabs) {
@@ -387,10 +407,12 @@ export function activate(context: vscode.ExtensionContext) {
 			const record = records.get(id)!;
 			if (!tabs.has(id)) { mount(record); }
 			editors.set(id, panel);
+			const focus = panel.onDidChangeViewState(refreshUsage);
 			panel.title = title(record);
 			panel.iconPath = vscode.Uri.joinPath(media, record.agent + '.svg');
 			const listener = bindWebview(panel.webview, id);
 			panel.onDidDispose(() => {
+				focus.dispose();
 				listener.dispose();
 				if (editors.get(id) !== panel) { return; }
 				editors.delete(id);

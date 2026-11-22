@@ -3,6 +3,7 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
+import './agentUsagePopover.js';
 import { localize, localize2 } from '../../../../nls.js';
 import { IStatusbarService } from '../../../services/statusbar/browser/statusbar.js';
 import { Action } from '../../../../base/common/actions.js';

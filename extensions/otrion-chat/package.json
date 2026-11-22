@@ -9,6 +9,7 @@
 		"vscode": "^1.147.0"
 	},
 	"main": "./out/extension.js",
+	"activationEvents": ["onStartupFinished"],
 	"extensionKind": [
 		"workspace"
 	],
@@ -115,6 +116,13 @@
 					"default": [],
 					"scope": "machine",
 					"description": "Additional ACP agents enabled in Otrion Settings on this host."
+				},
+				"otrion.chat.usageProviders": {
+					"type": "object",
+					"additionalProperties": { "type": "string", "pattern": "^[a-z0-9][a-z0-9-]*$" },
+					"default": {},
+					"scope": "machine",
+					"markdownDescription": "Link an enabled agent to its billing provider configured in the CodexBar CLI on this host. For example, `{ \"antigravity\": \"antigravity\", \"qwen-code\": \"qwencloud\", \"goose\": \"openrouter\" }`. Linked accounts are labeled CodexBar in usage details."
 				},
 				"otrion.chat.agentPaths": {
 					"type": "object",
