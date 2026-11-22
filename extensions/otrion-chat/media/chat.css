@@ -226,18 +226,40 @@ details[open] > .activity-heading svg { transform: rotate(90deg); }
 .activity-heading > span { min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
 .activity-heading > small { flex: none; font-size: 10px; }
 .activity-heading > small:empty { display: none; }
-.activity[data-status=failed] .activity-heading > small { color: var(--vscode-errorForeground); }
+.activity[data-failed] > details:not([open]) > .activity-heading > small { display: none; }
+.activity[data-failed] .activity-heading > small { color: var(--vscode-errorForeground); }
 .activity[data-status=in_progress] .activity-heading > svg, .tool-location, .markdown-image { color: var(--accent); }
 .activity-body { margin: 1px 4px 8px 28px; color: var(--vscode-foreground); min-width: 0; }
 .activity.thought .activity-body { color: var(--muted); }
-.activity-output, .tool-input {
+.activity-output, .execution-panel {
 	margin: 5px 0; border-radius: 8px; border: 1px solid var(--line);
 	background: var(--vscode-textCodeBlock-background, var(--surface)); overflow: hidden;
 }
 .activity-body pre { max-height: 260px; overflow: auto; scrollbar-width: thin; }
-.activity-body h4, .tool-input summary { font: inherit; font-size: 11px; color: var(--muted); }
-.activity-output > h4, .tool-input summary { margin: 0; padding: 7px 10px 2px; }
-.tool-input summary { padding-bottom: 7px; cursor: pointer; }
+.activity-body h4 { font: inherit; font-size: 11px; color: var(--muted); }
+.activity-output > h4 { margin: 0; padding: 7px 10px 2px; }
+/* Keep command, output and adapter data in one compact inspector. */
+.execution-panel > details + details { border-top: 1px solid var(--line); }
+.execution-panel summary {
+	display: flex; align-items: baseline; gap: 9px; padding: 7px 10px;
+	color: var(--muted); cursor: pointer; list-style: none; font-size: 11px;
+}
+.execution-panel summary::-webkit-details-marker { display: none; }
+.execution-panel summary::before {
+	content: ''; flex: none; align-self: center; width: 5px; height: 5px;
+	border: solid currentColor; border-width: 1px 1px 0 0; transform: rotate(45deg);
+}
+.execution-panel details[open] > summary::before { transform: rotate(135deg); }
+.execution-panel summary strong { flex: none; font-weight: 600; color: var(--vscode-foreground); }
+.execution-panel summary span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-family: var(--mono); }
+.execution-panel details[open] > summary span { visibility: hidden; }
+.execution-panel summary:hover { background: var(--vscode-list-hoverBackground); }
+.execution-panel summary:focus-visible { outline: 1px solid var(--vscode-focusBorder); outline-offset: -1px; }
+.execution-panel details > div { display: flex; align-items: flex-start; gap: 5px; padding: 0 6px 8px 12px; }
+.execution-panel pre {
+	flex: 1; min-width: 0; margin: 0; padding: 4px 0; max-height: min(13em, 32vh);
+	background: transparent; white-space: pre; overflow-wrap: normal; font: 12px/1.55 var(--mono);
+}
 .activity-output > pre { white-space: pre-wrap; overflow-wrap: anywhere; background: transparent; padding-top: 2px; }
 .tool-location { display: block; text-align: left; overflow-wrap: anywhere; font: 11px var(--mono); }
 .diff-add, .hljs-addition { color: var(--vscode-gitDecoration-addedResourceForeground); }
