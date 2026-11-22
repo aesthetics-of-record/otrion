@@ -17,8 +17,9 @@ export function activate(context: vscode.ExtensionContext) {
 	registerThemeGuide(context);
 	const history = new SessionHistory(context, store);
 	const recent = new SessionHistory(context, store);
+	const sidebar = new SessionHistory(context, store);
 	let enabledAgents = new Set(agentIds.filter(allowed));
-	context.subscriptions.push(history, recent);
+	context.subscriptions.push(history, recent, sidebar);
 	const key = 'chatSessions.v1';
 	const saved = context.workspaceState.get<{ records: SessionRecord[]; tabs: string[]; active: string }>(key);
 	const records = new Map((saved?.records ?? []).map(record => [record.id, record]));
@@ -39,7 +40,14 @@ export function activate(context: vscode.ExtensionContext) {
 	let ready = false;
 	let restoreDrafts = true;
 
+	const tabLogos = new Map<AgentId, string>();
+	void Promise.all(agentIds.map(async id => {
+		const bytes = await vscode.workspace.fs.readFile(vscode.Uri.joinPath(media, id + '.svg'));
+		tabLogos.set(id, Buffer.from(bytes).toString('base64'));
+	})).then(() => { if (tabs.size) { save(); } }, error => console.error('Could not load session icons', error));
+
 	let homeRevision = 0;
+	let publishSidebar: (() => void) | undefined;
 
 	async function agentChoices() {
 		const adapters = await Promise.all(agentIds.map(async id => ({
@@ -92,13 +100,32 @@ export function activate(context: vscode.ExtensionContext) {
 	function title(record: SessionRecord) {
 		return record.title || record.messages.find(m => m.role === 'You')?.text.split(/\r?\n/)[0].slice(0, 80) || agents[record.agent].name + ' Session';
 	}
+	function historyItems(source: SessionHistory) {
+		const known = new Map([...records.values()].filter(record => record.remoteId).map(record => [record.agent + '/' + record.remoteId, record]));
+		const items = [...source.entries].filter(([, info]) => enabledAgents.has(info.agent)).map(([id, info]) => ({
+			id, label: info.title || info.sessionId, agent: info.agent, detail: agents[info.agent].name,
+			cwd: info.cwd, updatedAt: known.get(id)?.pendingFirstPrompt ? undefined : known.get(id)?.updatedAt ?? info.updatedAt, active: known.get(id)?.id === active
+		}));
+		if (vscode.workspace.isTrusted) {
+			for (const record of records.values()) {
+				if (!enabledAgents.has(record.agent) || (!tabs.has(record.id) && !record.messages.length)
+					|| (record.remoteId && source.entries.has(record.agent + '/' + record.remoteId))) { continue; }
+				items.push({ id: record.id, label: title(record), agent: record.agent, detail: agents[record.agent].name,
+					cwd: record.cwd ?? '', updatedAt: record.updatedAt, active: record.id === active });
+			}
+		}
+		items.sort((a, b) => (Date.parse(b.updatedAt ?? '') || 0) - (Date.parse(a.updatedAt ?? '') || 0) || a.id.localeCompare(b.id));
+		return items;
+	}
+
 	function save() {
+		publishSidebar?.();
 		void context.workspaceState.update(key, { records: [...records.values()], tabs: sideIds(), active });
 		for (const [id, panel] of editors) {
 			const name = title(records.get(id)!);
 			if (panel.title !== name) { panel.title = name; }
 		}
-		const strip = sideIds().map(id => ({ id, title: title(records.get(id)!), agent: agents[records.get(id)!.agent].name, active: id === active, saved: isSaved(id) }));
+		const strip = sideIds().map(id => ({ id, title: title(records.get(id)!), agent: agents[records.get(id)!.agent].name, logo: tabLogos.get(records.get(id)!.agent), active: id === active, saved: isSaved(id) }));
 		const serialized = JSON.stringify(strip);
 		if (serialized !== header) {
 			header = serialized;
@@ -121,6 +148,10 @@ export function activate(context: vscode.ExtensionContext) {
 		const panel = editors.get(id);
 		if (panel) { panel.reveal(); return; }
 		if (!tabs.has(id)) { mount(record); }
+		if (record.remoteId && !record.updatedAt) {
+			const key = record.agent + '/' + record.remoteId;
+			record.updatedAt = (sidebar.entries.get(key) ?? history.entries.get(key) ?? recent.entries.get(key))?.updatedAt;
+		}
 		recent.dispose();
 		active = id;
 		tabs.get(id)!.select();
@@ -133,6 +164,7 @@ export function activate(context: vscode.ExtensionContext) {
 			record = { id: randomUUID(), agent: info.agent, remoteId: info.sessionId, messages: [] };
 			mount(record);
 		}
+		record.updatedAt ??= info.updatedAt;
 		record.pendingFirstPrompt = false;
 		record.cwd = info.cwd;
 		record.title = info.title;
@@ -194,21 +226,41 @@ export function activate(context: vscode.ExtensionContext) {
 				if (tab) { tab.snapshot(); void presentMenu(); } else { void empty().then(presentMenu); }
 				return;
 			}
-			if (!editorId && message?.type === 'endHistory') { history.dispose(); return; }
-			if (message?.tabId !== current) { return; }
+			if (!editorId && message?.type === 'sessionsSidebarVisible') {
+				void vscode.commands.executeCommand('setContext', 'otrion.chat.sessionsSidebarOpen', message.open === true);
+				return;
+			}
+			if (!editorId && message?.type === 'endHistory') {
+				if (message.sidebar) { publishSidebar = undefined; sidebar.cancel(); } else { history.dispose(); }
+				return;
+			}
+			if (message?.tabId !== current && !(message?.type === 'listHistory' && message.sidebar && !editorId)) { return; }
 			if (!editorId && message.type === 'newSession' && isAgent(message.id)) { add(message.id); return; }
 			if (!editorId && message.type === 'chooseAgent') { void requestMenu('new', !active); return; }
 			if (!editorId && message.type === 'listHistory') {
-				const source = message.home && !active ? recent : history;
+				const source = message.sidebar ? sidebar : message.home && !active ? recent : history;
+				let previous = '';
 				void source.refresh((status, settingsTarget) => {
-					const items = [...source.entries.entries()]
-						.sort(([, a], [, b]) => (Date.parse(b.updatedAt ?? '') || 0) - (Date.parse(a.updatedAt ?? '') || 0))
-						.map(([id, info]) => ({ id, label: info.title || info.sessionId, detail: agents[info.agent].name, cwd: info.cwd }));
-					void webview.postMessage({ type: 'historyPage', request: message.request, home: source === recent, items: source === recent ? items.slice(0, 5) : items, status, settingsTarget });
+					const publish = () => {
+						const items = historyItems(source);
+						const result = source === recent ? items.slice(0, 5) : items;
+						const serialized = JSON.stringify(result);
+						if (serialized === previous) { return; }
+						previous = serialized;
+						void webview.postMessage({ type: 'historyPage', request: message.request, home: source === recent, sidebar: source === sidebar, items: result, status, settingsTarget });
+					};
+					if (source === sidebar) { publishSidebar = publish; }
+					publish();
 				});
 				return;
 			}
-			if (!editorId && message.type === 'openHistory') { openHistory(message.id, message.home ? recent : history); history.dispose(); return; }
+			if (!editorId && message.type === 'openHistory') {
+				const record = records.get(message.id);
+				if (record && allowed(record.agent) && vscode.workspace.isTrusted) { open(record.id); }
+				else { openHistory(message.id, message.sidebar ? sidebar : message.home ? recent : history); }
+				history.dispose();
+				return;
+			}
 			if (message.type === 'settings') {
 				const target = isAgent(message.target) || message.target === 'agents' ? message.target : records.get(current)?.agent ?? 'agents';
 				setupTab = tab && target === records.get(current)?.agent ? current : undefined;
@@ -290,11 +342,15 @@ export function activate(context: vscode.ExtensionContext) {
 	context.subscriptions.push(store.onAuthChange(agent => {
 		history.dispose();
 		recent.dispose();
+		publishSidebar = undefined;
+		sidebar.dispose();
+		void view?.webview.postMessage({ type: 'dismissHistory' });
 		for (const [id, session] of tabs) {
 			if (records.get(id)?.agent === agent) { session.invalidateAuth(); }
 		}
 	}));
 	context.subscriptions.push(vscode.commands.registerCommand('otrion.chat.new', () => requestMenu('new')),
+	vscode.commands.registerCommand('otrion.chat.toggleSessions', () => view?.webview.postMessage({ type: 'toggleSessions' })),
 	vscode.commands.registerCommand('otrion.chat.history', () => requestMenu('history')),
 	vscode.commands.registerCommand('otrion.chat.activateTab', open),
 	vscode.commands.registerCommand('otrion.chat.closeTab', close),
@@ -332,7 +388,7 @@ export function activate(context: vscode.ExtensionContext) {
 			if (!tabs.has(id)) { mount(record); }
 			editors.set(id, panel);
 			panel.title = title(record);
-			panel.iconPath = vscode.Uri.joinPath(media, 'orbit.svg');
+			panel.iconPath = vscode.Uri.joinPath(media, record.agent + '.svg');
 			const listener = bindWebview(panel.webview, id);
 			panel.onDidDispose(() => {
 				listener.dispose();
@@ -355,8 +411,11 @@ export function activate(context: vscode.ExtensionContext) {
 				visibility.dispose();
 				listener.dispose();
 				if (view === resolved) {
+					void vscode.commands.executeCommand('setContext', 'otrion.chat.sessionsSidebarOpen', false);
 					history.dispose();
 					recent.dispose();
+					sidebar.dispose();
+					publishSidebar = undefined;
 					view = undefined;
 				}
 			});

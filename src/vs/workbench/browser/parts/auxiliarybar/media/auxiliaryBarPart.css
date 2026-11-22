@@ -129,7 +129,9 @@
 	.otrion-session-tab:first-child { border-inline-start: 1px solid color-mix(in srgb, var(--vscode-tab-inactiveForeground) 14%, transparent); }
 	.otrion-session-tab.selected { border-top-color: var(--vscode-focusBorder); background: var(--vscode-tab-activeBackground); }
 	.otrion-session-tab button { border: 0; background: transparent; color: var(--vscode-descriptionForeground); cursor: pointer; font: inherit; white-space: nowrap; overflow: hidden; padding: 3px 10px; }
-	.otrion-session-tab button[data-session] { flex: 1; align-self: stretch; min-width: 0; text-align: start; }
+	.otrion-session-tab button[data-session] { display: flex; align-items: center; gap: 6px; flex: 1; align-self: stretch; min-width: 0; text-align: start; }
 	.otrion-session-tab.selected button { color: var(--vscode-tab-activeForeground); }
 	.otrion-session-tab button > span { display: block; width: max-content; max-width: 100%; box-sizing: border-box; padding-inline-end: 12px; overflow: hidden; mask-image: linear-gradient(to right, black calc(100% - 12px), transparent); }
 }
+
+.otrion-session-tab .otrion-agent-icon { flex: none; width: 16px; height: 16px; background: currentColor; mask: center / contain no-repeat; }

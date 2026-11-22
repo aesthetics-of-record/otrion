@@ -14,7 +14,7 @@ export function chatHtml(web: vscode.Webview, media: vscode.Uri, scripts: vscode
 <html lang="en"><head><meta charset="utf-8">
 <meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src ${web.cspSource} https: data:; style-src ${web.cspSource} 'nonce-${nonce}'; script-src ${web.cspSource};">
 <style nonce="${nonce}">
-	${agentIds.map(id => '#session-choices [data-choice="' + id + '"] .agent-icon { mask-image: url("' + resource(media, id + '.svg') + '"); }').join('\n')}
+	${agentIds.map(id => '[data-agent="' + id + '"] .agent-icon { mask-image: url("' + resource(media, id + '.svg') + '"); }').join('\n')}
 	body { margin: 0; background: var(--vscode-sideBar-background); }
 	#chat-loading:not([hidden]) { position: fixed; inset: 0; display: grid; place-content: center; justify-items: center; gap: 8px; color: var(--vscode-descriptionForeground); font: 12px var(--vscode-font-family, system-ui); opacity: 0; animation: chat-loading-in 160ms ease-out 180ms forwards; }
 	@keyframes chat-loading-in { to { opacity: 1; } }
@@ -24,6 +24,7 @@ export function chatHtml(web: vscode.Webview, media: vscode.Uri, scripts: vscode
 </head><body>
 	<template id="copy-action"><button type="button" class="transcript-action">${icon('M10.5 3.5h7a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2h-7a2 2 0 0 1-2-2v-9a2 2 0 0 1 2-2Z M4.5 7.5v11a2 2 0 0 0 2 2h9')}${icon('m4.5 12 4.3 4.3q.7.7 1.4 0l9.3-9.3')}</button></template>
 	<div id="chat-loading" role="status"><img src="${resource(media, 'orbit.svg')}" width="32" height="32" alt=""><span>Loading chat…</span></div>
+	<div id="chat-column">
 	<main id="thread" hidden>
 		<section id="welcome" aria-label="New conversation">
 			<img src="${resource(media, 'orbit.svg')}" alt="">
@@ -45,7 +46,7 @@ export function chatHtml(web: vscode.Webview, media: vscode.Uri, scripts: vscode
 		<section id="messages" aria-label="Conversation messages"></section>
 	</main>
 	<section id="session-menu" class="popover" aria-labelledby="session-menu-title" hidden>
-		<h2 id="session-menu-title"></h2>
+		<header><h2 id="session-menu-title"></h2><button type="button" class="icon-button" id="history-close" aria-label="Close sessions" hidden>${icon('M6 6l12 12M18 6 6 18')}</button></header>
 		<input id="history-search" type="search" aria-label="Filter session history" placeholder="Find a session…" hidden>
 		<div id="session-choices" class="menu-choices"></div>
 		<p id="history-status" role="status"></p>
@@ -107,6 +108,14 @@ export function chatHtml(web: vscode.Webview, media: vscode.Uri, scripts: vscode
 			<p id="context-info"></p>
 		</section>
 	</footer>
+	</div>
+	<aside id="sessions-sidebar" aria-label="Agent sessions" hidden>
+		<h2>Sessions</h2>
+		<input type="search" id="sidebar-search" aria-label="Filter agent sessions" placeholder="Find a session…">
+		<div id="sidebar-choices" class="menu-choices"></div>
+		<p id="sidebar-status" role="status"></p>
+		<button id="sidebar-settings" class="agent-settings-link" type="button" hidden>Open agent settings</button>
+	</aside>
 	<script src="${resource(media, 'markdown.js')}"></script>
 	<script src="${resource(scripts, 'composer.js')}"></script>
 	<script src="${resource(scripts, 'transcriptView.js')}"></script>

@@ -9,7 +9,7 @@ import { Action2, MenuId, MenuRegistry, registerAction2 } from '../../../../plat
 import { ContextKeyExpr } from '../../../../platform/contextkey/common/contextkey.js';
 import { registerIcon } from '../../../../platform/theme/common/iconRegistry.js';
 import { Categories } from '../../../../platform/action/common/actionCommonCategories.js';
-import { AuxiliaryBarMaximizedContext, AuxiliaryBarVisibleContext, IsAuxiliaryWindowContext, IsSessionsWindowContext, SecondarySideBarVisibleContext } from '../../../common/contextkeys.js';
+import { ActiveAuxiliaryContext, AuxiliaryBarMaximizedContext, AuxiliaryBarVisibleContext, IsAuxiliaryWindowContext, IsSessionsWindowContext, SecondarySideBarVisibleContext } from '../../../common/contextkeys.js';
 import { ViewContainerLocation, ViewContainerLocationToString } from '../../../common/views.js';
 import { ActivityBarPosition, IWorkbenchLayoutService, LayoutSettings, Parts } from '../../../services/layout/browser/layoutService.js';
 import { IPaneCompositePartService } from '../../../services/panecomposite/browser/panecomposite.js';
@@ -82,7 +82,21 @@ MenuRegistry.appendMenuItem(MenuId.AuxiliaryBarTitle, {
 	},
 	group: 'navigation',
 	order: 2,
-	when: ContextKeyExpr.equals(`config.${LayoutSettings.ACTIVITY_BAR_LOCATION}`, ActivityBarPosition.DEFAULT)
+	when: ContextKeyExpr.and(
+		ContextKeyExpr.equals(`config.${LayoutSettings.ACTIVITY_BAR_LOCATION}`, ActivityBarPosition.DEFAULT),
+		ActiveAuxiliaryContext.notEqualsTo('workbench.view.extension.otrion-chat'))
+});
+
+MenuRegistry.appendMenuItem(MenuId.AuxiliaryBarTitle, {
+	command: {
+		id: 'otrion.chat.toggleSessions',
+		title: localize('toggleOtrionSessions', "Toggle Agent Sessions Sidebar"),
+		icon: Codicon.layoutSidebarRight,
+		toggled: ContextKeyExpr.has('otrion.chat.sessionsSidebarOpen'),
+	},
+	group: 'navigation',
+	order: 2,
+	when: ActiveAuxiliaryContext.isEqualTo('workbench.view.extension.otrion-chat')
 });
 
 registerAction2(class extends Action2 {
