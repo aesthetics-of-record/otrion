@@ -25,7 +25,7 @@ const artifacts: Record<string, [file: string, sha512: string]> = {
 	'win32-arm64': ['windows-arm/cli_windows_arm64.exe', 'c85686d6ae68d4566f86af0c240e4b49a303549ae152757546878193f25a263b02c4d8f1d5030631dc93646a298dcb02713c18e7850390e3db5c9dda6c31265f'],
 };
 
-export async function installAntigravity(staging: string, download: typeof fetch = fetch, update?: AgentArchive) {
+export async function installAntigravity(staging: string, download: typeof fetch = fetch, update?: AgentArchive, onDownload?: (fraction: number) => void) {
 	let target = process.platform + '-' + process.arch;
 	if (process.platform === 'linux') {
 		const report = process.report.getReport() as { header: { glibcVersionRuntime?: string } };
@@ -34,7 +34,7 @@ export async function installAntigravity(staging: string, download: typeof fetch
 	const artifact = artifacts[target];
 	if (!artifact) { throw new Error('Antigravity is unavailable for ' + target + '.'); }
 	const [file, sha512] = artifact;
-	const payload = await downloadVerified('Antigravity', staging, update?.url ?? release + file, 'sha512', update?.digest ?? sha512, download);
+	const payload = await downloadVerified('Antigravity', staging, update?.url ?? release + file, 'sha512', update?.digest ?? sha512, download, onDownload);
 	if (process.platform === 'win32') {
 		await rename(payload, path.join(staging, 'agy.exe'));
 	} else {

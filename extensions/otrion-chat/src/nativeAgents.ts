@@ -41,19 +41,26 @@ export function nativeEntry(id: NativeAgent) {
 	return process.platform === 'win32' ? path.join('goose-package', 'goose.exe') : 'goose';
 }
 
-export async function downloadVerified(id: string, staging: string, url: string, algorithm: 'sha256' | 'sha512', digest: string, download: typeof fetch = fetch) {
+export async function downloadVerified(id: string, staging: string, url: string, algorithm: 'sha256' | 'sha512', digest: string, download: typeof fetch = fetch, onDownload?: (fraction: number) => void) {
 	const response = await download(url, { signal: AbortSignal.timeout(300_000) });
 	if (!response.ok || !response.body) { throw new Error(id + ' download failed (HTTP ' + response.status + ').'); }
 	const file = path.join(staging, 'download');
 	const hash = createHash(algorithm);
+	const total = Number(response.headers.get('content-length'));
+	let received = 0;
 	await pipeline(response.body, async function* (chunks) {
-		for await (const chunk of chunks) { hash.update(chunk); yield chunk; }
+		for await (const chunk of chunks) {
+			hash.update(chunk);
+			received += chunk.byteLength;
+			if (total > 0 && !response.headers.has('content-encoding')) { onDownload?.(Math.min(1, received / total)); }
+			yield chunk;
+		}
 	}, createWriteStream(file, { flags: 'wx', mode: 0o600 }));
 	if (hash.digest('hex') !== digest) { throw new Error(id + ' download failed its ' + (algorithm === 'sha512' ? 'SHA-512' : 'SHA-256') + ' check.'); }
 	return file;
 }
 
-export async function installNative(id: NativeAgent, staging: string, update?: AgentArchive) {
+export async function installNative(id: NativeAgent, staging: string, update?: AgentArchive, onDownload?: (fraction: number) => void) {
 	let target = process.platform + '-' + process.arch;
 	if (id === 'goose' && process.platform === 'linux') {
 		const report = process.report.getReport() as { header: { glibcVersionRuntime?: string } };
@@ -62,7 +69,7 @@ export async function installNative(id: NativeAgent, staging: string, update?: A
 	const archive = archives[id][target];
 	if (!archive) { throw new Error('No ' + id + ' release for ' + target + '.'); }
 	const [url, digest] = archive;
-	const file = await downloadVerified(id, staging, update?.url ?? url, 'sha256', update?.digest ?? digest);
+	const file = await downloadVerified(id, staging, update?.url ?? url, 'sha256', update?.digest ?? digest, fetch, onDownload);
 	// Windows ships bsdtar, which also extracts ZIP releases.
 	await promisify(execFile)('tar', ['-xf', file, '-C', staging], { windowsHide: true });
 	await unlink(file);
