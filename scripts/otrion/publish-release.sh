@@ -5,6 +5,7 @@ assets_dir=$1
 tag="$RELEASE_TAG"
 version=${tag#v}
 asset_names=$(node scripts/otrion/release-targets.mjs assets "$version")
+download_table=$(node scripts/otrion/release-targets.mjs notes "$version" "$GITHUB_REPOSITORY")
 expected=()
 while IFS= read -r name; do
   expected+=("$name")
@@ -38,8 +39,12 @@ if draft=$(gh release view "$tag" --json isDraft --jq .isDraft); then
     echo "$tag is already published."
     exit 0
   fi
+  notes=$(gh release view "$tag" --json body --jq .body)
+  if [[ "$notes" != "$download_table" && "$notes" != "$download_table"$'\n'* ]]; then
+    gh release edit "$tag" --notes "$download_table"$'\n\n'"$notes"
+  fi
 else
-  gh release create "$tag" --verify-tag --draft --title "Otrion $version" --generate-notes
+  gh release create "$tag" --verify-tag --draft --title "Otrion $version" --notes "$download_table" --generate-notes
 fi
 gh release upload "$tag" "${files[@]}" --clobber
 gh release edit "$tag" --draft=false
