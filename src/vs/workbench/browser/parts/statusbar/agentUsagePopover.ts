@@ -95,7 +95,7 @@ CommandsRegistry.registerCommand('_otrion.showUsagePopover', accessor => {
 					button.onclick = () => { selected = selected === p.id ? undefined : p.id; draw(); };
 				}
 				if (snapshot.unreported?.length) {
-					append(list, $('p.usage-caption', {}, localize('otrionUsageUnavailable', "No account data · {0}", snapshot.unreported.join(', '))));
+					append(list, $('p.usage-caption', {}, localize('otrionUsageUnreported', "No account data · {0}", snapshot.unreported.join(', '))));
 				}
 				if (provider) {
 					const name = append(detail, $('header.usage-identity'));
