@@ -32,7 +32,6 @@ interface SessionMetadata {
 	recordedModel?: string;
 	options: ChatOption[];
 	commands?: { name: string; description?: string }[];
-	usage?: { used: number; size: number };
 	configuring: boolean;
 	connected: boolean;
 	workspace?: string;
@@ -80,7 +79,7 @@ function updateMetadata(data: SessionMetadata) {
 	const commandsChanged = metadata.commands !== data.commands && JSON.stringify(metadata.commands) !== JSON.stringify(data.commands);
 	metadata = data;
 	if (commandsChanged && !suggestions.hidden && input.textContent.startsWith('/')) { suggest(); }
-	const { options, usage, workspace, connected, configuring } = data;
+	const { options, workspace, connected, configuring } = data;
 	const model = options.find(option => option.kind === 'model');
 	const modelLabel = model?.choices.find(choice => choice.value === model.current)?.name ?? (typeof model?.current === 'string' ? model.current : 'Model');
 	const warning = element<HTMLDetailsElement>('resume-warning');
@@ -90,7 +89,7 @@ function updateMetadata(data: SessionMetadata) {
 	element('resume-warning-detail').textContent = mismatch ? `This session used ${data.recordedModel}. Current model: ${modelLabel}.` : '';
 	element('model-name').textContent = modelLabel;
 	modelButton.title = modelLabel + ' · Model settings';
-	// Usage notifications should preserve menu focus.
+	// Keep menu focus when unrelated metadata changes.
 	const key = JSON.stringify(options);
 	if (key !== renderedOptions) {
 		renderedOptions = key;
@@ -169,16 +168,6 @@ function updateMetadata(data: SessionMetadata) {
 		: connected && !options.some(o => o.kind === 'mode') ? 'This agent exposes no session modes.' : '';
 	modeNote.hidden = !modeNote.textContent;
 	element('workspace').textContent = workspace || 'Empty workspace';
-	const pct = usage ? Math.min(100, Math.round(100 * usage.used / usage.size)) : 0;
-	element('context-percent').textContent = usage ? pct + '%' : 'Awaiting usage';
-	element('context-info').textContent = usage
-		? usage.used.toLocaleString() + ' of ' + usage.size.toLocaleString() + ' tokens used'
-		: 'Usage appears when the agent reports its context window.';
-	const bar = element<HTMLProgressElement>('usage-bar');
-	bar.hidden = !usage;
-	bar.value = pct;
-	document.getElementById('usage-ring')!.setAttribute('stroke-dasharray', pct + ' 100');
-	contextButton.setAttribute('aria-label', usage ? 'Session context, ' + pct + '% used' : 'Session context');
 }
 
 function beginConfiguration() {

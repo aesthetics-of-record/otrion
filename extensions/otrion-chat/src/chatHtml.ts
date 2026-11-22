@@ -91,8 +91,8 @@ export function chatHtml(web: vscode.Webview, media: vscode.Uri, scripts: vscode
 			<div class="controls">
 				<button id="mode" type="button" aria-label="Agent mode" aria-controls="mode-panel" aria-expanded="false" title="Agent mode">Mode</button>
 				<button id="model" type="button" aria-controls="model-panel" aria-expanded="false" aria-label="Model settings"><span id="model-name">Model</span></button>
-				<button id="context" type="button" class="icon-button" aria-controls="context-panel" aria-expanded="false" aria-label="Session context">
-					<svg viewBox="0 0 20 20" aria-hidden="true"><circle cx="10" cy="10" r="7" class="track"/><circle id="usage-ring" cx="10" cy="10" r="7" pathLength="100" stroke-dasharray="0 100" transform="rotate(-90 10 10)"/></svg>
+				<button id="context" type="button" class="icon-button" aria-controls="context-panel" aria-expanded="false" aria-label="Session workspace">
+					${icon('M3 7V5h6l2 2h10v12H3z')}
 				</button>
 				<button id="attach-image" type="button" class="icon-button" aria-label="Attach images" title="Attach images">${icon('M3 5h18v14H3z M3 16l5-5 4 4 3-3 6 6 M16 9h.01')}</button>
 				<button id="attach" type="button" class="icon-button" aria-label="Attach files" title="Attach files">${icon('M8 13l7-7a3 3 0 0 1 4.2 4.2l-9 9a5 5 0 0 1-7.1-7.1l9.2-9.2m-6.2 12.2a1.4 1.4 0 0 0 2 2l8.4-8.4')}</button>
@@ -100,12 +100,9 @@ export function chatHtml(web: vscode.Webview, media: vscode.Uri, scripts: vscode
 				<button id="stop" class="primary" type="button" aria-label="Stop response" title="Stop response" hidden><span class="square"></span></button>
 			</div>
 		</form>
-		<section id="context-panel" class="popover" aria-label="Session context" hidden>
-			<h2>Session context</h2>
+		<section id="context-panel" class="popover" aria-label="Session workspace" hidden>
+			<h2>Session workspace</h2>
 			<div class="context-row"><span>Workspace</span><strong id="workspace"></strong></div>
-			<div class="context-row"><span>Context window</span><strong id="context-percent"></strong></div>
-			<progress id="usage-bar" max="100" hidden></progress>
-			<p id="context-info"></p>
 		</section>
 	</footer>
 	</div>

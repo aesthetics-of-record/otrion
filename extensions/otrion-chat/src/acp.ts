@@ -35,6 +35,7 @@ export interface SessionUpdate {
 	currentModeId?: string;
 	size?: number;
 	used?: number;
+	cost?: { amount: number; currency: string } | null;
 	sessionUpdate: string;
 	messageId?: string;
 	content?: ContentBlock | ToolContent[];
@@ -66,7 +67,33 @@ class AcpRequestError extends Error {
 	}
 }
 
+export interface QuotaWindow {
+	label?: string;
+	usedPercent: number;
+	windowDurationMins?: number | null;
+	resetsAt?: number | null;
+}
+
+interface RateLimits {
+	primary?: QuotaWindow | null;
+	secondary?: QuotaWindow | null;
+	planType?: string | null;
+	credits?: { balance?: string | null; unlimited?: boolean } | null;
+}
+
+export interface AccountQuota {
+	windows: QuotaWindow[];
+	plan?: string;
+	credits?: string;
+	unlimited?: boolean;
+	unmetered?: string[];
+	balance?: { amount: number; currency: string };
+}
+
 interface AcpResult {
+	account?: { type: string; planType?: string } | null;
+	rateLimits?: RateLimits;
+	rateLimitsByLimitId?: Record<string, RateLimits>;
 	providerId?: string | null;
 	modelId?: string | null;
 	entries?: { providerId: string; configured: boolean }[];
@@ -97,6 +124,7 @@ export class AcpClient {
 	#pending = new Map<number, PendingRequest>();
 	#nextId = 0;
 	#closed = false;
+	#codexQuotaProbe = false;
 	#sessionId?: string;
 	#configOptions: { category?: string; id?: string }[] = [];
 	#legacyOptions = new Map<'mode' | 'model', { currentValue: string; options: { value: string; name: string; description?: string }[] }>();
@@ -106,7 +134,7 @@ export class AcpClient {
 
 	#onUpdate: (update: SessionUpdate) => void;
 
-	constructor(private readonly id: AgentId, command: string, args: string[], private readonly cwd: string, env: NodeJS.ProcessEnv, onUpdate: (update: SessionUpdate) => void) {
+	constructor(private readonly id: AgentId, command: string, args: string[], private readonly cwd: string, env: NodeJS.ProcessEnv, onUpdate: (update: SessionUpdate) => void, private readonly onClose?: () => void) {
 		this.#onUpdate = onUpdate;
 		this.#process = spawn(command, args, {
 			cwd,
@@ -154,6 +182,27 @@ export class AcpClient {
 			this.dispose();
 			await exited;
 		}
+	}
+
+	// Used only by a dedicated Codex app-server process. Both protocols use JSON-RPC over stdio.
+	async readCodexQuota(version: string): Promise<AccountQuota | undefined> {
+		this.#codexQuotaProbe = true;
+		await this.#request('initialize', { clientInfo: { name: 'otrion', title: 'Otrion', version } }, 5000);
+		this.#write({ method: 'initialized' });
+		const { account } = await this.#request('account/read', { refreshToken: false }, 5000);
+		if (!account?.type.startsWith('chatgpt')) { return undefined; }
+		const result = await this.#request('account/rateLimits/read', {}, 8000);
+		const limits = result.rateLimitsByLimitId?.codex ?? result.rateLimits;
+		const windows = [limits?.primary, limits?.secondary].filter((w): w is QuotaWindow =>
+			!!w && Number.isFinite(w.usedPercent) && w.usedPercent >= 0 && w.usedPercent <= 100);
+		const credits = limits?.credits ?? result.rateLimits?.credits;
+		return { windows, plan: limits?.planType ?? account.planType, credits: credits?.balance ?? undefined, unlimited: credits?.unlimited === true };
+	}
+
+	async readGrokBilling(version: string): Promise<unknown> {
+		const init = await this.#initialize(version, false, 5000);
+		if (init._meta?.defaultAuthMethodId !== 'cached_token') { return undefined; }
+		return this.#request('_x.ai/billing', {}, 8000);
 	}
 
 	async accountStatus(version: string) {
@@ -342,6 +391,7 @@ export class AcpClient {
 			reject(error);
 		}
 		this.#pending.clear();
+		this.onClose?.();
 	}
 
 	#write(message: object) {
@@ -371,7 +421,8 @@ export class AcpClient {
 			this.dispose(new Error('ACP agent returned invalid JSON.'));
 			return;
 		}
-		if (message?.jsonrpc !== '2.0') {
+		// Codex app-server omits the JSON-RPC version on its stdio responses.
+		if (message?.jsonrpc !== '2.0' && !(this.#codexQuotaProbe && message && message.jsonrpc === undefined && typeof message.id === 'number' && !message.method)) {
 			return;
 		}
 		if (typeof message.method === 'string') {

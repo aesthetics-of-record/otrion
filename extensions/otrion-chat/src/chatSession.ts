@@ -83,6 +83,7 @@ export function createSession(context: vscode.ExtensionContext, store: AgentStor
 	let client: AcpClient | undefined;
 	let authRevision = 0;
 	let connectedRevision = -1;
+	let sessionReady = false;
 	let turn: Turn | undefined;
 	const messages = record.messages;
 	const queue = record.queue ??= [];
@@ -101,7 +102,7 @@ export function createSession(context: vscode.ExtensionContext, store: AgentStor
 	let connectionIssue: 'setup' | 'connection' | undefined;
 
 	let options: SessionOption[] = [];
-	let usage: { used: number; size: number } | undefined;
+	let cost: { amount: number; currency: string } | undefined;
 	let configuring = false;
 	let commands: { name: string; description?: string }[] = [];
 	const preferenceKey = 'sessionOptions.v1.' + selected;
@@ -119,7 +120,7 @@ export function createSession(context: vscode.ExtensionContext, store: AgentStor
 	}
 
 	function metadata() {
-		return { options, commands, usage, configuring, recordedModel: record.recordedModel, connected: !!client && !client.closed,
+		return { options, commands, configuring, recordedModel: record.recordedModel, connected: !!client && !client.closed,
 			workspace: record.cwd ? basename(record.cwd) : vscode.workspace.workspaceFolders?.[0]?.name };
 	}
 
@@ -154,11 +155,12 @@ export function createSession(context: vscode.ExtensionContext, store: AgentStor
 	}
 
 	function disconnect() {
+		sessionReady = false;
 		client?.dispose();
 		client = undefined;
 		options = [];
 		commands = [];
-		usage = undefined;
+		cost = undefined;
 	}
 
 	function onUpdate(name: string, update: SessionUpdate) {
@@ -169,10 +171,10 @@ export function createSession(context: vscode.ExtensionContext, store: AgentStor
 			options = readSessionOptions(update.configOptions);
 			publishMetadata();
 		} else if (update.sessionUpdate === 'usage_update') {
-			const { used, size } = update;
-			if (typeof used === 'number' && Number.isSafeInteger(used) && used >= 0
-				&& typeof size === 'number' && Number.isSafeInteger(size) && size > 0) {
-				usage = { used, size };
+			const reported = update.cost;
+			if (reported && Number.isFinite(reported.amount) && reported.amount >= 0 && /^[A-Z]{3}$/.test(reported.currency)
+				&& (cost?.amount !== reported.amount || cost.currency !== reported.currency)) {
+				cost = reported;
 				publishMetadata();
 			}
 		} else {
@@ -221,7 +223,7 @@ export function createSession(context: vscode.ExtensionContext, store: AgentStor
 			}
 			if (replay && applyTranscriptUpdate(replay, agents[id].name, update) !== undefined) { return; }
 			onUpdate(agents[id].name, update);
-		});
+		}, () => { if (!disposed && client === session) { publishMetadata(); } });
 		client = session;
 		connectedRevision = revision;
 		try {
@@ -249,6 +251,7 @@ export function createSession(context: vscode.ExtensionContext, store: AgentStor
 				if (pendingMessage) { messages.push(pendingMessage); }
 			}
 			replay = undefined;
+			sessionReady = true;
 			changed();
 			return session;
 		} catch (error) {
@@ -548,5 +551,6 @@ export function createSession(context: vscode.ExtensionContext, store: AgentStor
 		if (connectionIssue === 'setup') { await configure(); }
 	}
 
-	return { retrySetup, invalidateAuth() { authRevision++; }, get busy() { return !!turn; }, select, snapshot, send, sendQueued, discardQueued, openLink, stop, configure, attach, describeResources, findContext, suspend, dispose() { disposed = true; search?.cancel(); suspend(); } };
+	return { get connected() { return sessionReady && !!client && !client.closed && authRevision === connectedRevision; },
+		get sessionCost() { return cost; }, retrySetup, invalidateAuth() { authRevision++; }, get busy() { return !!turn; }, select, snapshot, send, sendQueued, discardQueued, openLink, stop, configure, attach, describeResources, findContext, suspend, dispose() { disposed = true; search?.cancel(); suspend(); } };
 }

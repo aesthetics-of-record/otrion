@@ -1,0 +1,69 @@
+/* Copyright (c) Otrion contributors. Licensed under the MIT License. */
+
+.otrion-usage-popover {
+	display: flex;
+	align-items: end;
+	gap: 5px;
+	padding: 4px 1px 6px;
+	max-width: calc(100vw - 16px);
+	color: var(--vscode-menu-foreground, var(--vscode-foreground));
+	font: var(--vscode-font-size, 13px)/1.45 var(--vscode-font-family);
+	text-align: start;
+	white-space: normal;
+}
+
+.otrion-usage-popover .usage-pane {
+	box-sizing: border-box;
+	width: min(376px, calc(100vw - 20px));
+	max-width: 100%;
+	max-height: min(440px, 65vh);
+	overflow: auto;
+	padding: 8px;
+	background: var(--vscode-menu-background, var(--vscode-editorWidget-background));
+	border: 1px solid var(--vscode-menu-border, var(--vscode-widget-border, var(--vscode-contrastBorder, color-mix(in srgb, currentColor 18%, transparent))));
+	border-radius: 10px;
+	box-shadow: 0 4px 16px var(--vscode-widget-shadow);
+}
+
+.otrion-usage-popover .usage-detail { width: 292px; }
+.otrion-usage-popover header, .otrion-usage-popover .usage-values, .otrion-usage-popover .usage-identity, .otrion-usage-popover .usage-summary {
+	display: flex;
+	align-items: center;
+	gap: 7px;
+}
+
+.otrion-usage-popover header { padding: 4px 6px 9px; }
+.otrion-usage-popover .usage-refresh, .otrion-usage-popover .usage-values > :last-child, .otrion-usage-popover header small { margin-inline-start: auto; }
+.otrion-usage-popover button { color: inherit; font: inherit; cursor: pointer; background: transparent; border: none; border-radius: 5px; }
+.otrion-usage-popover header button.codicon { font-family: codicon; padding: 4px; }
+.otrion-usage-popover .usage-refresh[aria-busy=true] { opacity: .5; }
+.otrion-usage-popover .usage-row { display: grid; gap: 5px; width: 100%; text-align: start; padding: 8px; }
+.otrion-usage-popover button:hover { background: var(--vscode-list-hoverBackground); }
+.otrion-usage-popover .usage-row[aria-expanded=true] { background: var(--vscode-list-inactiveSelectionBackground); color: var(--vscode-list-inactiveSelectionForeground, inherit); }
+.otrion-usage-popover button:focus-visible { outline: 1px solid var(--vscode-focusBorder); outline-offset: -1px; }
+.otrion-usage-popover .usage-plan { text-transform: capitalize; }
+.otrion-usage-popover small, .otrion-usage-popover .usage-caption, .otrion-usage-popover .usage-plan { color: var(--vscode-descriptionForeground); font-size: 12px; }
+.otrion-usage-popover p { margin: 6px; }
+.otrion-usage-popover .usage-section { display: grid; gap: 6px; padding: 10px 7px; border-top: 1px solid color-mix(in srgb, currentColor 12%, transparent); }
+.otrion-usage-popover .usage-logo { flex: none; width: 16px; height: 16px; mask: center / contain no-repeat; background: currentColor; }
+.otrion-usage-popover .usage-meter { appearance: none; width: 100%; height: 6px; }
+.otrion-usage-popover .usage-meter::-webkit-meter-inner-element { display: block; }
+.otrion-usage-popover .usage-meter::-webkit-meter-bar { height: 6px; border: 0; border-radius: 3px; background: color-mix(in srgb, currentColor 20%, transparent); }
+.otrion-usage-popover .usage-meter::-webkit-meter-optimum-value { border-radius: inherit; background: var(--vscode-progressBar-background); }
+.otrion-usage-popover .usage-provider { grid-template-columns: minmax(0, 1fr) fit-content(60%) auto; align-items: center; gap: 8px; }
+.otrion-usage-popover .usage-provider .usage-identity strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.otrion-usage-popover .usage-summary { min-width: 0; text-align: end; overflow-wrap: anywhere; font-variant-numeric: tabular-nums; }
+.otrion-usage-popover .usage-ring {
+	flex: none;
+	width: 15px;
+	height: 15px;
+	border-radius: 50%;
+	background: conic-gradient(var(--vscode-progressBar-background) var(--usage-remaining), color-mix(in srgb, currentColor 32%, transparent) 0);
+	mask: radial-gradient(closest-side, transparent calc(100% - 2px), black calc(100% - 1.5px));
+}
+.otrion-usage-popover .usage-provider > .codicon { color: var(--vscode-descriptionForeground); }
+.otrion-usage-popover .usage-session strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+@media (max-width: 695px) {
+	.otrion-usage-popover { flex-direction: column; align-items: stretch; max-height: 75vh; }
+	.otrion-usage-popover .usage-pane { width: min(376px, calc(100vw - 20px)); min-height: 0; }
+}

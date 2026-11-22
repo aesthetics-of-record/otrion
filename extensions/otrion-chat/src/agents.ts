@@ -9,6 +9,7 @@ import { createRequire } from 'node:module';
 import { promisify, stripVTControlCharacters } from 'node:util';
 import * as vscode from 'vscode';
 
+import { parseAccountQuota, readLinkedQuota, readProductQuota } from './accountQuota';
 import { AcpClient } from './acp';
 import { configureAntigravityKeyProfile, installAntigravity } from './antigravity';
 import { nativeEntry, installNative } from './nativeAgents';
@@ -370,6 +371,28 @@ export class AgentStore {
 		const cli = await resolveCommand('codex', '@openai/codex', 'bin/codex.js');
 		if (!cli) { throw new Error('Install the Codex CLI or the Otrion-managed adapter.'); }
 		return { command: cli.command, args: [...cli.args, 'login'] };
+	}
+
+	async accountQuota(id: AgentId, signal: AbortSignal) {
+		if (!vscode.workspace.isTrusted || !allowed(id)) { return; }
+		const linked = vscode.workspace.getConfiguration('otrion.chat').get<Record<string, string>>('usageProviders')?.[id];
+		if (linked) { return readLinkedQuota(linked, signal); }
+		if (id === 'antigravity' || id === 'qwen-code' || id === 'goose' || id === 'pi') { return; }
+		const launch = await this.launch(id);
+		if (!launch || signal.aborted) { return; }
+		const auth = await this.credentials(id);
+		if (auth.mode === 'key' && (id !== 'cline' || !auth.key)) { return; }
+		const env = { ...process.env, ...launch.env };
+		if (id === 'cline' && auth.mode === 'key') { env.CLINE_API_KEY = auth.key; }
+		signal.throwIfAborted();
+		if (id !== 'grok' && id !== 'codex') { return readProductQuota(id, { ...launch, env }, signal); }
+		const args = id === 'codex' ? [...launch.baseArgs, 'cli', 'app-server'] : launch.args;
+		const probe = new AcpClient(id, launch.command, args, homedir(), env, () => {});
+		const close = () => probe.dispose();
+		signal.addEventListener('abort', close, { once: true });
+		try {
+			return id === 'codex' ? await probe.readCodexQuota(vscode.version) : parseAccountQuota(id, await probe.readGrokBilling(vscode.version));
+		} finally { signal.removeEventListener('abort', close); close(); }
 	}
 
 	async authStatus(id: AgentId, launch: NonNullable<Awaited<ReturnType<AgentStore['launch']>>>) {
