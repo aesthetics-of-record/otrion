@@ -316,6 +316,7 @@ document.addEventListener('keydown', event => {
 });
 
 const defaultPlaceholder = input.getAttribute('aria-placeholder')!;
+const composerPlaceholder = document.querySelector<HTMLElement>('.composer-placeholder')!;
 function updateComposer() {
 	input.contentEditable = loaded ? 'plaintext-only' : 'false';
 	const hasDraft = !!(attachedImages.length || input.textContent.trim());
@@ -323,7 +324,8 @@ function updateComposer() {
 	send.title = busy ? 'Queue message (Enter)' : 'Send message (Enter)';
 	send.setAttribute('aria-label', busy ? 'Queue message' : 'Send message');
 	input.setAttribute('aria-placeholder', busy ? 'Queue a follow-up…' : defaultPlaceholder);
-	input.nextElementSibling!.textContent = busy ? 'Queue a follow-up…' : defaultPlaceholder;
+	composerPlaceholder.textContent = busy ? 'Queue a follow-up…' : defaultPlaceholder;
+	composerPlaceholder.hidden = readDraft(input).length > 0;
 	send.disabled = readingImages || connectionIssue === 'setup' || !allowed || !trusted || (!attachedImages.length && !input.textContent.trim()) || !loaded || metadata.configuring;
 	element<HTMLButtonElement>('attach-image').disabled = readingImages || !allowed || !trusted || !loaded;
 	element<HTMLButtonElement>('attach').disabled = !allowed || !trusted || !loaded;
