@@ -488,30 +488,33 @@ export class AgentStore {
 		}
 	}
 
-	async install(id: AgentId) {
+	async install(id: AgentId, progress?: (percent: number) => void) {
 		if (await this.isInstalled(id)) { return; }
-		await this.installRelease(id, bundledVersion(id), false);
+		await this.installRelease(id, bundledVersion(id), false, progress);
 	}
 
-	async update(id: AgentId, target: string) {
+	async update(id: AgentId, target: string, progress?: (percent: number) => void) {
 		const launch = await this.launch(id);
 		if (!vscode.workspace.isTrusted || !launch?.release) { throw new Error('Updates require an Otrion-managed agent in a trusted workspace.'); }
 		if (versionKey(launch.release) === target) { return; }
 		const release = await this.availableUpdate(id, launch.release);
 		if (!release || versionKey(release) !== target) { throw new Error('The available release changed. Check for updates again.'); }
-		await this.installRelease(id, release, true);
+		await this.installRelease(id, release, true, progress);
 	}
 
-	private async installRelease(id: AgentId, release: AgentRelease, update: boolean) {
+	private async installRelease(id: AgentId, release: AgentRelease, update: boolean, progress?: (percent: number) => void) {
 		const install = this.installation(id, release);
 		const issue = installIssue(id);
 		if (issue) { throw new Error(issue); }
 		await mkdir(this.root, { recursive: true });
 		const staging = await mkdtemp(path.join(this.root, id + '-install-'));
 		try {
+			progress?.(25);
+			const downloaded = (fraction: number) => progress?.(25 + Math.floor(fraction * 50));
 			if (agents[id].npm) { await this.installNpm(id, staging, release); }
-			else if (id === 'cursor' || id === 'goose') { await installNative(id, staging, release.archive); }
-			else { await installAntigravity(staging, fetch, release.archive); }
+			else if (id === 'cursor' || id === 'goose') { await installNative(id, staging, release.archive, downloaded); }
+			else { await installAntigravity(staging, fetch, release.archive, downloaded); }
+			progress?.(75);
 			if (!await fileExists(path.join(staging, install.entry))) { throw new Error('The downloaded adapter is missing its entry point.'); }
 			if (update) {
 				const remote = !!vscode.env.remoteAuthority;
@@ -526,6 +529,7 @@ export class AgentStore {
 				const client = new AcpClient(id, cli.command, [...cli.args, ...(agents[id].args ?? [])], homedir(), env, () => {});
 				await client.checkProtocol(vscode.version);
 			}
+			progress?.(90);
 			try {
 				await rename(staging, install.directory);
 			} catch (error) {
@@ -535,5 +539,6 @@ export class AgentStore {
 		} finally {
 			await rm(staging, { recursive: true, force: true, maxRetries: 5 });
 		}
+		progress?.(100);
 	}
 }

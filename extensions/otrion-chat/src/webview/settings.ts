@@ -55,7 +55,14 @@
 	});
 	reset.addEventListener('click', () => host.postMessage({ action: 'resetGallery' }));
 	reload.addEventListener('click', () => host.postMessage({ action: 'reload' }));
+	function showProgress(id: string, percent?: number) {
+		const label = document.getElementById(id)?.querySelector<HTMLElement>('.install-progress');
+		if (!label) { return; }
+		label.hidden = percent === undefined;
+		label.textContent = percent === undefined ? '' : 'Installation · ' + percent + '%';
+	}
 	window.addEventListener('message', ({ data }) => {
+		if (data.installProgress) { showProgress(data.installProgress.id, data.installProgress.percent); }
 		if (data.focusAgent) {
 			showPage('page-agents');
 			const target = data.focusAgent === 'agents' ? search : sections.find(section => section.id === data.focusAgent);
@@ -90,6 +97,7 @@
 		if (!data.rows) { return; }
 		for (const row of data.rows) {
 			const section = document.getElementById(row.id)!;
+			showProgress(row.id, row.percent);
 			const primary = section.querySelector<HTMLButtonElement>('.primary')!;
 			const update = section.querySelector<HTMLButtonElement>('[data-action="update"]')!;
 			const release = section.querySelector<HTMLElement>('.agent-release')!;

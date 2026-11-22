@@ -12,7 +12,7 @@ export function registerSettings(context: vscode.ExtensionContext, store: AgentS
 	let panel: vscode.WebviewPanel | undefined;
 	let currentPage: 'general' | 'agents' = 'general';
 	let focusAgent: AgentId | 'agents' | undefined;
-	const installing = new Set<AgentId>();
+	const installing = new Map<AgentId, number>();
 	const changingAuth = new Set<AgentId>();
 	const loginTerminals = new Map<AgentId, vscode.Terminal>();
 	let loginRefresh: ReturnType<typeof setTimeout> | undefined;
@@ -71,7 +71,7 @@ export function registerSettings(context: vscode.ExtensionContext, store: AgentS
 			const choice = await store.authChoice(id);
 			const auth = choice.mode === 'cli' && launch && allowed(id) ? await store.authStatus(id, launch) : undefined;
 			const authenticated = auth === 'Signed in' || auth === 'Provider configured' || auth === 'CLI credentials configured' || auth === 'CLI API key';
-			return { id, release: launch?.release, version: launch?.release && versionKey(launch.release), versionLabel: launch?.release && formatVersion(launch.release), trusted: vscode.workspace.isTrusted, auth, authenticated, ...choice, installed, source: launch?.source, availability: launch?.source ?? missing, installIssue: installIssue(id), allowed: allowed(id), installing: installing.has(id), signingIn: changingAuth.has(id) || loginTerminals.has(id), error: errors.get(id) };
+			return { id, release: launch?.release, version: launch?.release && versionKey(launch.release), versionLabel: launch?.release && formatVersion(launch.release), trusted: vscode.workspace.isTrusted, auth, authenticated, ...choice, installed, source: launch?.source, availability: launch?.source ?? missing, installIssue: installIssue(id), allowed: allowed(id), installing: installing.has(id), percent: installing.get(id), signingIn: changingAuth.has(id) || loginTerminals.has(id), error: errors.get(id) };
 		}));
 		if (panel === current && currentPage === 'agents' && sequence === revision) {
 			for (const row of rows) {
@@ -108,11 +108,16 @@ export function registerSettings(context: vscode.ExtensionContext, store: AgentS
 				return;
 			} else if (action === 'install' || (action === 'update' && typeof value === 'string')) {
 				if (installing.has(id)) { return; }
-				installing.add(id);
+				const progress = (percent: number) => {
+					if (installing.get(id) === percent) { return; }
+					installing.set(id, percent);
+					void panel?.webview.postMessage({ installProgress: { id, percent } });
+				};
+				progress(0);
 				void refresh();
 				try {
-					if (action === 'update') { await store.update(id, value as string); }
-					else { await store.install(id); }
+					if (action === 'update') { await store.update(id, value as string, progress); }
+					else { await store.install(id, progress); }
 					onSetup(id);
 				} finally { installing.delete(id); }
 			} else if (action === 'allow' && typeof value === 'boolean') {
@@ -215,6 +220,7 @@ export function registerSettings(context: vscode.ExtensionContext, store: AgentS
 				<span class="agent-icon" aria-hidden="true"></span>
 				<div class="agent-info">
 					<h3 id="${id}-name">${agent.name}</h3><p class="agent-description" title="${agent.description}">${agent.description}</p><span class="auth" role="status"></span>
+					<small class="install-progress" role="status" hidden></small>
 					<div class="agent-release" hidden><span class="release-label"></span> <button class="auth-action" data-action="update" hidden>Update</button></div>
 				</div>
 				<button class="primary" disabled>Checking…</button>
