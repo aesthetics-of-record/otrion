@@ -82,7 +82,10 @@ function activityTitle(row: TranscriptRow, command?: string) {
 	if (row.kind === 'thought') { return 'Thoughts'; }
 	if (command) {
 		const verb = row.status === 'completed' ? 'Ran' : row.status === 'in_progress' ? 'Running' : 'Run';
-		return verb + ' ' + command.trim().replace(/^(?:Ran|Running|Run)\s+/i, '').replace(/\s+/g, ' ');
+		const shellText = command.trim().replace(/^(?:Ran|Running|Run)\s+/i, '').replace(/^(?:\S*\/)?(?:zsh|bash|sh|dash|ksh|fish)\s+-[a-z]*c\s+["']?/i, '');
+		const firstLine = shellText.split('\n', 1)[0].trim();
+		const concise = firstLine.length > 52 ? firstLine.split(/\s+/, 1)[0] : firstLine;
+		return verb + ' ' + concise;
 	}
 	return row.title || 'Tool call';
 }
@@ -132,27 +135,47 @@ function appendArtifacts(body: HTMLElement, row: TranscriptRow) {
 	}
 }
 
+function executionSection(panel: HTMLElement, label: string, text: string, preview: string) {
+	const section = document.createElement('details');
+	section.dataset.section = label;
+	const summary = document.createElement('summary');
+	const name = document.createElement('strong');
+	name.textContent = label;
+	const excerpt = document.createElement('span');
+	excerpt.textContent = preview;
+	summary.append(name, excerpt);
+	const content = document.createElement('div');
+	const pre = document.createElement('pre');
+	pre.textContent = text;
+	pre.tabIndex = 0;
+	pre.setAttribute('aria-label', label);
+	content.append(pre, copyButton('Copy ' + label.toLowerCase(), () => text));
+	section.append(summary, content);
+	panel.append(section);
+}
+
+function executionPanel(command: string, row: TranscriptRow) {
+	const panel = document.createElement('div');
+	panel.className = 'execution-panel';
+	executionSection(panel, 'Command', command, command.trim().split('\n', 1)[0]);
+	if (row.terminal) {
+		const lines = row.terminal.trimEnd().split('\n');
+		executionSection(panel, 'Terminal', row.terminal, lines.at(-1) ?? '');
+	}
+	if (row.output && row.output !== row.terminal && !row.artifacts?.some(part => part.text === row.output)) {
+		executionSection(panel, 'Output', row.output, row.output.trimStart().split('\n', 1)[0]);
+	}
+	if (row.input && row.input !== command) {
+		executionSection(panel, 'Tool input', row.input, '');
+	}
+	return panel;
+}
+
 function activityBody(body: HTMLElement, row: TranscriptRow) {
 	if (row.text) { body.append(formatted(row.text)); }
 	const command = commandText(row);
-	if (command) { outputBlock(body, 'Command', command); }
-	else if (row.title && (row.kind === 'tool' || row.kind === 'notice')) {
-		const title = document.createElement('p');
-		title.textContent = row.title;
-		body.append(title);
-	}
-	if (row.input && row.input !== command) {
-		if (command) {
-			const inputDetails = document.createElement('details');
-			inputDetails.className = 'tool-input';
-			const summary = document.createElement('summary');
-			summary.textContent = 'Tool input';
-			const raw = document.createElement('pre');
-			raw.textContent = row.input;
-			inputDetails.append(summary, raw);
-			body.append(inputDetails);
-		} else { outputBlock(body, 'Input', row.input); }
-	}
+	if (command) { body.append(executionPanel(command, row)); }
+	else if (row.input) { outputBlock(body, 'Input', row.input); }
 	for (const loc of row.locations ?? []) {
 		const button = document.createElement('button');
 		button.className = 'tool-location';
@@ -172,10 +195,10 @@ function activityBody(body: HTMLElement, row: TranscriptRow) {
 		body.append(plan);
 	}
 	appendArtifacts(body, row);
-	if (row.terminal !== undefined || row.exit) {
+	if (!command && (row.terminal !== undefined || row.exit)) {
 		outputBlock(body, row.exit ? 'Terminal · ' + row.exit : 'Terminal', row.terminal ?? '');
 	}
-	if (row.output && row.output !== row.terminal && !row.artifacts?.some(part => part.text === row.output)) { outputBlock(body, 'Output', row.output); }
+	if (!command && row.output && row.output !== row.terminal && !row.artifacts?.some(part => part.text === row.output)) { outputBlock(body, 'Output', row.output); }
 }
 
 const rowModels = new WeakMap<HTMLElement, TranscriptRow>();
@@ -212,15 +235,29 @@ function renderTranscriptRow(index: number, message: TranscriptRow) {
 		const entries = message.entries;
 		const state = message.status ?? '';
 		heading.querySelector('small')!.textContent = entries ? entries.filter(entry => entry.status === 'completed').length + '/' + entries.length
-			: command && state === 'in_progress' ? '' : labels[state] ?? state;
+			: command && message.exit ? [labels[state], message.exit].filter(Boolean).join(' · ') : command && state === 'in_progress' ? '' : labels[state] ?? state;
 		row.dataset.status = state;
+		row.toggleAttribute('data-failed', state === 'failed' || !!message.exit && message.exit !== 'Exit code 0');
 		if (details.open) {
 			const body = details.lastElementChild as HTMLElement;
-			const inputOpen = body.querySelector('details')?.open;
+			const expanded = new Map(Array.from(body.querySelectorAll<HTMLDetailsElement>('details[data-section][open]'), section => {
+				const pre = section.querySelector('pre')!;
+				return [section.dataset.section, [pre.scrollTop, pre.scrollLeft]] as const;
+			}));
+			const focused = document.activeElement;
+			const focusSection = focused?.closest<HTMLDetailsElement>('details[data-section]');
 			body.replaceChildren();
 			activityBody(body, message);
-			const toolInput = body.querySelector('details');
-			if (inputOpen && toolInput) { toolInput.open = true; }
+			for (const section of body.querySelectorAll<HTMLDetailsElement>('details[data-section]')) {
+				const scroll = expanded.get(section.dataset.section);
+				if (scroll) {
+					section.open = true;
+					section.querySelector('pre')!.scrollTo(scroll[1], scroll[0]);
+				}
+				if (focusSection && section.dataset.section === focusSection.dataset.section) {
+					section.querySelector<HTMLElement>(focused!.tagName)?.focus({ preventScroll: true });
+				}
+			}
 		}
 	} else {
 		if (previous && !previous.kind && previous.text === message.text && previous.role === message.role && !message.artifacts?.length && !previous.artifacts?.length) { return; }
