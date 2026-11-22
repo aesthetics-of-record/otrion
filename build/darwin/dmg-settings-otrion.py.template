@@ -1,0 +1,20 @@
+format = 'UDZO'
+files = [{{APP_PATH}}]
+symlinks = {'Applications': '/Applications'}
+icon = {{BADGE_ICON}}
+background = {{BACKGROUND}}
+
+window_rect = ((150, 150), (600, 360))
+show_status_bar = False
+show_tab_view = False
+show_toolbar = False
+show_pathbar = False
+show_sidebar = False
+default_view = 'icon-view'
+arrange_by = None
+icon_size = 86
+text_size = 13
+icon_locations = {
+	{{APP_NAME}}: (155, 221),
+	'Applications': (445, 221),
+}
