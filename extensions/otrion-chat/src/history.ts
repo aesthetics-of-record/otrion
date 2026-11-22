@@ -13,26 +13,24 @@ export class SessionHistory {
 	constructor(private readonly context: vscode.ExtensionContext, private readonly store: AgentStore) {}
 
 	dispose() {
+		this.entries.clear();
+		this.cancel();
+	}
+
+	cancel() {
 		this.generation++;
 		for (const client of this.clients) { client.dispose(); }
 		this.clients.clear();
-		this.entries.clear();
 	}
 
 	async refresh(publish: (status: string, settingsTarget?: AgentId | 'agents') => void) {
-		this.dispose();
+		this.cancel();
 		const generation = this.generation;
-		if (!vscode.workspace.isTrusted) { publish('Trust this workspace to view agent sessions.'); return; }
+		if (!vscode.workspace.isTrusted) { this.entries.clear(); publish('Trust this workspace to view agent sessions.'); return; }
 		const enabled = (Object.keys(agents) as AgentId[]).filter(allowed);
-		if (!enabled.length) { publish('Enable an agent to view its sessions.', 'agents'); return; }
+		if (!enabled.length) { this.entries.clear(); publish('Enable an agent to view its sessions.', 'agents'); return; }
 		const errors = new Map<AgentId, string>();
-		let remaining = enabled.length;
-		const update = () => {
-			if (generation === this.generation) {
-				publish([remaining ? 'Loading sessions…' : '', ...errors.values()].filter(Boolean).join('\n'),
-					errors.size > 1 ? 'agents' : errors.keys().next().value);
-			}
-		};
+		const next: typeof this.entries = new Map();
 		await Promise.all(enabled.map(async agent => {
 			let client: AcpClient | undefined;
 			try {
@@ -47,17 +45,21 @@ export class SessionHistory {
 				await client.listSessions(this.context.extension.packageJSON.version, sessions => {
 					if (generation !== this.generation) { return; }
 					for (const info of sessions) {
-						this.entries.set(agent + '/' + info.sessionId, { ...info, agent });
+						next.set(agent + '/' + info.sessionId, { ...info, agent });
 					}
-					update();
 				});
 			} catch (error) {
 				errors.set(agent, agents[agent].name + ' · ' + error.message);
+				for (const [id, info] of this.entries) {
+					if (info.agent === agent && !next.has(id)) { next.set(id, info); }
+				}
 			} finally {
 				if (client) { this.clients.delete(client); client.dispose(); }
-				remaining--;
-				update();
 			}
 		}));
+		if (generation !== this.generation) { return; }
+		this.entries.clear();
+		for (const [id, info] of next) { this.entries.set(id, info); }
+		publish(enabled.flatMap(agent => errors.get(agent) ?? []).join('\n'), errors.size > 1 ? 'agents' : errors.keys().next().value);
 	}
 }

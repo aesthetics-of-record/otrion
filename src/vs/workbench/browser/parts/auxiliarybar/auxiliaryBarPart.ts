@@ -161,7 +161,7 @@ export class AuxiliaryBarPart extends AbstractPaneCompositePart {
 		area.prepend(strip);
 		const key = 'otrion.chat.tabs';
 		const keys = new Set([key]);
-		const getTabs = () => this.contextKeyService.getContextKeyValue<{ id: string; title: string; agent: string; active: boolean; saved: boolean }[]>(key) ?? [];
+		const getTabs = () => this.contextKeyService.getContextKeyValue<{ id: string; title: string; agent: string; logo?: string; active: boolean; saved: boolean }[]>(key) ?? [];
 		let selected: string | undefined;
 		const render = () => {
 			const tabs = getTabs();
@@ -174,6 +174,13 @@ export class AuxiliaryBarPart extends AbstractPaneCompositePart {
 				const button = document.createElement('button');
 				const label = $('span');
 				label.textContent = tab.title;
+				if (tab.logo && /^[a-zA-Z0-9+/]+=*$/.test(tab.logo)) {
+					const logo = $('i.otrion-agent-icon');
+					logo.setAttribute('aria-hidden', 'true');
+					logo.style.maskImage = 'url(data:image/svg+xml;base64,' + tab.logo + ')';
+					button.append(logo);
+				}
+				button.setAttribute('aria-label', tab.agent + ' · ' + tab.title);
 				button.append(label);
 				button.draggable = true;
 				button.title = tab.agent + ' · ' + tab.title;
@@ -240,6 +247,22 @@ export class AuxiliaryBarPart extends AbstractPaneCompositePart {
 				event.preventDefault();
 				event.stopPropagation();
 				showTabMenu(button, button);
+			}
+		}));
+		const sidebarKey = 'otrion.chat.sessionsSidebarOpen';
+		const sidebarKeys = new Set([sidebarKey]);
+		let addedWidth = 0;
+		this._register(this.contextKeyService.onDidChangeContext(event => {
+			if (!event.affectsSome(sidebarKeys)) { return; }
+			const part = Parts.AUXILIARYBAR_PART;
+			if (this.layoutService.isAuxiliaryBarMaximized() || !this.layoutService.isVisible(part)) { addedWidth = 0; return; }
+			const size = this.layoutService.getSize(part);
+			if (this.contextKeyService.getContextKeyValue<boolean>(sidebarKey)) {
+				this.layoutService.setSize(part, { ...size, width: size.width + 220 });
+				addedWidth = this.layoutService.getSize(part).width - size.width;
+			} else if (addedWidth > 0) {
+				this.layoutService.setSize(part, { ...size, width: Math.max(this.minimumWidth, size.width - addedWidth) });
+				addedWidth = 0;
 			}
 		}));
 		this._register(this.contextKeyService.onDidChangeContext(e => { if (e.affectsSome(keys)) { render(); } }));

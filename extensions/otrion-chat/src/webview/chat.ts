@@ -186,7 +186,7 @@ function beginConfiguration() {
 	updateComposer();
 }
 
-type SessionChoice = { id: string; label: string; detail?: string; cwd?: string };
+type SessionChoice = { id: string; label: string; detail?: string; cwd?: string; agent?: string; updatedAt?: string; active?: boolean };
 const sessionMenu = element('session-menu');
 const historySearch = element<HTMLInputElement>('history-search');
 let menuKind: 'new' | 'history' = 'new';
@@ -194,42 +194,110 @@ let historyRequest = 0;
 const historyStatus = element('history-status');
 let sessionChoices: SessionChoice[] = [];
 
-function renderSessionChoices() {
-	const list = element('session-choices');
-	const focusedId = document.activeElement instanceof HTMLButtonElement ? document.activeElement.dataset.choice : undefined;
-	const query = historySearch.value.toLowerCase().trim();
-	list.replaceChildren();
-	for (const item of sessionChoices) {
-		if (!(item.label + ' ' + (item.detail ?? '') + ' ' + (item.cwd ?? '')).toLowerCase().includes(query)) { continue; }
-		const button = document.createElement('button');
-		if (menuKind === 'new') {
-			const icon = document.createElement('span');
-			icon.className = 'agent-icon';
-			icon.setAttribute('aria-hidden', 'true');
-			button.append(icon);
-		}
-		const label = document.createElement('span');
-		label.textContent = item.label;
-		button.append(label);
-		button.dataset.choice = item.id;
-		button.title = [item.label, item.cwd].filter(Boolean).join('\n');
-		if (item.detail) {
-			const detail = document.createElement('small');
-			detail.textContent = [item.detail, item.cwd].filter(Boolean).join(' · ');
-			button.append(detail);
-		}
-		button.addEventListener('click', () => {
-			sessionMenu.hidden = true;
-			element('home-new').setAttribute('aria-expanded', 'false');
-			post({ type: menuKind === 'new' ? 'newSession' : 'openHistory', id: item.id });
-		});
-		list.append(button);
-		if (item.id === focusedId) { button.focus({ preventScroll: true }); }
-	}
-	element('no-matches').hidden = !!list.childElementCount || !!historyStatus.textContent;
+function sessionLogo(button: HTMLButtonElement, agent: string) {
+	button.dataset.agent = agent;
+	const logo = document.createElement('span');
+	logo.className = 'agent-icon';
+	logo.setAttribute('aria-hidden', 'true');
+	button.append(logo);
 }
 
-historySearch.addEventListener('input', renderSessionChoices);
+function sessionDate(value?: string) {
+	const date = new Date(value ?? '');
+	if (!Number.isFinite(date.getTime())) { return { group: 'Other sessions', age: '' }; }
+	const today = new Date();
+	const day = (d: Date) => Date.UTC(d.getFullYear(), d.getMonth(), d.getDate());
+	const days = Math.max(0, (day(today) - day(date)) / 86400000);
+	const minutes = Math.max(0, Math.floor((today.getTime() - date.getTime()) / 60000));
+	const age = days ? days + 'd' : minutes >= 60 ? Math.floor(minutes / 60) + 'h' : minutes ? minutes + 'm' : 'Now';
+	return { group: days === 0 ? 'Today' : days === 1 ? 'Yesterday' : days < 7 ? 'Last 7 Days' : 'Earlier', age };
+}
+
+const sessionsSidebar = element('sessions-sidebar');
+const sidebarSearch = element<HTMLInputElement>('sidebar-search');
+let sidebarChoices: SessionChoice[] = [];
+let sidebarRequest = 0;
+let sidebarPending = false;
+let sidebarRefreshTimer: number | undefined;
+const choiceContent = new WeakMap<HTMLButtonElement, string>();
+
+function refreshSidebar() {
+	if (!sessionsSidebar.hidden) {
+		sidebarPending = true;
+		post({ type: 'listHistory', sidebar: true, request: ++sidebarRequest });
+	}
+}
+
+function renderSessionChoices(sidebar = false) {
+	const list = element(sidebar ? 'sidebar-choices' : 'session-choices');
+	const query = (sidebar ? sidebarSearch : historySearch).value.toLowerCase().trim();
+	const focused = list.contains(document.activeElement) ? document.activeElement as HTMLElement : undefined;
+	const previous = new Map(Array.from(list.children, child => [(child as HTMLElement).dataset.key, child as HTMLElement]));
+	let position = 0;
+	const place = (node: HTMLElement, key: string) => {
+		previous.delete(key);
+		node.dataset.key = key;
+		if (list.children[position] !== node) { list.insertBefore(node, list.children[position] ?? null); }
+		position++;
+	};
+	let group = '';
+	for (const item of sidebar ? sidebarChoices : sessionChoices) {
+		if (!(item.label + ' ' + (item.detail ?? '') + ' ' + (item.cwd ?? '')).toLowerCase().includes(query)) { continue; }
+		const date = sessionDate(item.updatedAt);
+		if ((sidebar || menuKind === 'history') && date.group !== group) {
+			group = date.group;
+			const key = 'group:' + group;
+			const heading = previous.get(key) ?? document.createElement('h3');
+			if (heading.textContent !== group) { heading.textContent = group; }
+			place(heading, key);
+		}
+		const key = 'choice:' + item.id;
+		let button = previous.get(key) as HTMLButtonElement | undefined;
+		if (!button) {
+			button = document.createElement('button');
+			button.dataset.choice = item.id;
+			button.addEventListener('click', () => {
+				if (!sidebar) {
+					sessionMenu.hidden = true;
+					element('home-new').setAttribute('aria-expanded', 'false');
+				}
+				post({ type: !sidebar && menuKind === 'new' ? 'newSession' : 'openHistory', sidebar, id: item.id });
+			});
+		}
+		const content = JSON.stringify([item.agent, item.label, item.detail, item.cwd, date.age]);
+		if (choiceContent.get(button) !== content) {
+			button.replaceChildren();
+			sessionLogo(button, item.agent ?? item.id);
+			const label = document.createElement('span');
+			label.textContent = item.label;
+			button.append(label);
+			button.title = [item.detail, item.label, item.cwd].filter(Boolean).join('\n');
+			button.setAttribute('aria-label', [item.detail, item.label, date.age].filter(Boolean).join(' · '));
+			if (item.detail) {
+				const detail = document.createElement('small');
+				detail.textContent = date.age;
+				button.append(detail);
+			}
+			choiceContent.set(button, content);
+		}
+		if (item.active) { button.setAttribute('aria-current', 'true'); } else { button.removeAttribute('aria-current'); }
+		place(button, key);
+	}
+	for (const node of previous.values()) { node.remove(); }
+	if (focused?.isConnected && document.activeElement !== focused) { focused.focus({ preventScroll: true }); }
+	if (sidebar) {
+		const status = element('sidebar-status');
+		const text = status.dataset.status || (position ? '' : 'No sessions found.');
+		if (status.textContent !== text) { status.textContent = text; }
+	} else { element('no-matches').hidden = !!position || !!historyStatus.textContent; }
+}
+
+historySearch.addEventListener('input', () => renderSessionChoices());
+sidebarSearch.addEventListener('input', () => renderSessionChoices(true));
+element('history-close').addEventListener('click', () => {
+	showPanel();
+	(tabId ? input : element('home-new')).focus();
+});
 document.addEventListener('keydown', event => {
 	const panel = event.target instanceof Element ? event.target.closest('.popover') : null;
 	if (!panel || !['ArrowDown', 'ArrowUp', 'Home', 'End'].includes(event.key)) { return; }
@@ -555,6 +623,7 @@ function renderRecent(items: SessionChoice[], status: string, settingsTarget?: s
 		const detail = document.createElement('small');
 		detail.textContent = [item.detail, item.cwd?.split(/[\\/]/).filter(Boolean).at(-1)].filter(Boolean).join(' · ');
 		row.title = [item.label, item.cwd].filter(Boolean).join('\n');
+		if (item.agent) { sessionLogo(row, item.agent); }
 		row.append(title, detail);
 		row.addEventListener('click', () => post({ type: 'openHistory', home: true, id: item.id }));
 		list.append(row);
@@ -641,6 +710,32 @@ window.addEventListener('message', ({ data }) => {
 		}
 	} else if (data.type === 'contextMatches') {
 		if (data.tabId === tabId && data.request === suggestionRequest) { renderSuggestions(data.items, 'No matching files or folders'); }
+	} else if (data.type === 'toggleSessions') {
+		sessionsSidebar.hidden = !sessionsSidebar.hidden;
+		post({ type: 'sessionsSidebarVisible', open: !sessionsSidebar.hidden });
+		if (sessionsSidebar.hidden) {
+			window.clearInterval(sidebarRefreshTimer);
+			post({ type: 'endHistory', sidebar: true });
+			if (tabId) { input.focus(); }
+		} else {
+			showPanel();
+			sidebarSearch.value = '';
+			if (!sidebarChoices.length) { element('sidebar-status').dataset.status = 'Loading sessions…'; }
+			renderSessionChoices(true);
+			refreshSidebar();
+			sidebarRefreshTimer = window.setInterval(() => {
+				if (!document.hidden && !sidebarPending) { refreshSidebar(); }
+			}, 60_000);
+			sidebarSearch.focus();
+		}
+	} else if (data.type === 'historyPage' && data.sidebar) {
+		if (!sessionsSidebar.hidden && data.request === sidebarRequest) {
+			sidebarPending = false;
+			sidebarChoices = data.items;
+			element('sidebar-status').dataset.status = data.status;
+			historySettings('sidebar-settings', data.settingsTarget);
+			renderSessionChoices(true);
+		}
 	} else if (data.type === 'sessionMenu') {
 		const dismiss = !sessionMenu.hidden && menuKind === data.menu && sessionMenu.classList.contains('from-home') === !!data.home;
 		showPanel();
@@ -652,7 +747,8 @@ window.addEventListener('message', ({ data }) => {
 		if (menuKind === 'history') { post({ type: 'listHistory', request: ++historyRequest }); }
 		historySearch.value = '';
 		historySearch.hidden = menuKind !== 'history';
-		element('session-menu-title').textContent = menuKind === 'new' ? 'New session' : 'Session history';
+		element('history-close').hidden = historySearch.hidden;
+		element('session-menu-title').textContent = menuKind === 'new' ? 'New session' : 'Sessions';
 		renderSessionChoices();
 		sessionMenu.classList.toggle('from-home', !!data.home);
 		element('home-new').setAttribute('aria-expanded', String(!!data.home));
@@ -665,8 +761,9 @@ window.addEventListener('message', ({ data }) => {
 		historyStatus.textContent = data.status;
 		historySettings('history-settings', data.settingsTarget);
 		renderSessionChoices();
-	} else if (data.type === 'dismissHistory' && menuKind === 'history') {
-		showPanel();
+	} else if (data.type === 'dismissHistory') {
+		if (menuKind === 'history') { showPanel(); }
+		refreshSidebar();
 	} else if (data.type === 'empty') {
 		element('agent-drop').hidden = true;
 		showPanel();

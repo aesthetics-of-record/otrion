@@ -131,16 +131,28 @@ form:focus-within { border-color: var(--vscode-focusBorder); }
 #model-panel h2 { font-size: 11px; color: var(--muted); margin: 2px 5px 5px; }
 
 #session-menu { position: fixed; inset: 4px 6px auto auto; width: min(235px, calc(100vw - 12px)); max-height: 60vh; margin: 0; padding: 8px; }
-#session-menu:has(#history-search:not([hidden])) { width: min(330px, calc(100vw - 12px)); }
-#session-choices button:has(small) { display: grid; justify-content: stretch; gap: 2px; }
-#session-choices button:has(.agent-icon) { justify-content: start; gap: 8px; }
-#session-choices .agent-icon { width: 16px; height: 16px; flex: none; background: currentColor; mask: center / contain no-repeat; }
-#session-choices button :is(span, small) { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-#session-choices small { margin-left: 0; }
+#session-menu:has(#history-search:not([hidden])) { width: min(320px, calc(100vw - 12px)); }
+body { flex-direction: row; }
+#chat-column { flex: 1; min-width: 0; display: flex; flex-direction: column; position: relative; }
+#sessions-sidebar {
+	flex: 0 0 clamp(108px, 34%, 260px); min-width: 0; overflow: auto; padding: 10px 7px;
+	border-inline-start: 1px solid var(--line); background: var(--vscode-sideBar-background);
+}
+#sessions-sidebar h2 { margin: 0 4px 9px; font-size: 12px; }
+#sidebar-status { white-space: pre-line; font-size: 11px; color: var(--muted); }
+#session-menu header { display: flex; align-items: center; justify-content: space-between; }
+
+:is(#session-choices, #sidebar-choices) h3 { margin: 14px 6px 3px; color: var(--muted); font-size: 11px; font-weight: 500; }
+:is(#session-choices, #sidebar-choices) button[aria-current=true] { background: var(--vscode-list-activeSelectionBackground); color: var(--vscode-list-activeSelectionForeground); }
+:is(#session-choices, #sidebar-choices) button:has(small) { display: grid; grid-template-columns: 16px minmax(0, 1fr) auto; text-align: start; }
+:is(#session-choices, #sidebar-choices) button:has(.agent-icon) { justify-content: start; gap: 8px; }
+.agent-icon { width: 16px; height: 16px; flex: none; background: currentColor; mask: center / contain no-repeat; }
+:is(#session-choices, #sidebar-choices) button :is(span, small) { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+:is(#session-choices, #sidebar-choices) small { margin-left: 0; }
 #history-status { white-space: pre-line; }
 #history-status:empty { display: none; }
 #session-menu h2 { margin: 2px 5px 6px; font-size: 11px; color: var(--muted); }
-#history-search { width: 100%; padding: 5px 6px; margin-bottom: 5px; font: inherit; color: var(--vscode-input-foreground); background: var(--vscode-input-background); border: 1px solid var(--line); border-radius: 4px; }
+:is(#history-search, #sidebar-search) { width: 100%; padding: 5px 6px; margin-bottom: 5px; font: inherit; color: var(--vscode-input-foreground); background: var(--vscode-input-background); border: 1px solid var(--line); border-radius: 4px; }
 .menu-choices small { flex: none; color: var(--muted); margin-left: 5px; }
 .menu-choices button { gap: 4px; overflow-wrap: anywhere; }
 #session-choices { max-height: 42vh; overflow: auto; }
@@ -182,6 +194,8 @@ form:focus-within { border-color: var(--vscode-focusBorder); }
 #home-new:hover, #home-settings:hover { background: var(--vscode-button-secondaryHoverBackground); }
 #home h2 { font-size: 11px; font-weight: 550; margin: 22px 0 5px; color: var(--muted); }
 #recent-list button { width: 100%; display: grid; text-align: left; padding: 6px; gap: 2px; border-radius: 4px; }
+#recent-list button[data-agent] { grid-template-columns: 16px minmax(0, 1fr); column-gap: 8px; }
+#recent-list .agent-icon { grid-row: span 2; align-self: center; }
 #recent-list span, #recent-list small { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 #recent-list small, #recent-status { font-size: 11px; color: var(--muted); }
 .agent-settings-link { color: var(--vscode-textLink-foreground); padding: 3px 0; font-size: 12px; }

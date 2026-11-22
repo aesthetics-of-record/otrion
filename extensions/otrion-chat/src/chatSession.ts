@@ -50,6 +50,7 @@ interface QueuedMessage {
 }
 
 export interface SessionRecord {
+	updatedAt?: string;
 	queue?: QueuedMessage[];
 	options?: Record<string, string | boolean>;
 	pendingModel?: string;
@@ -405,6 +406,7 @@ export function createSession(context: vscode.ExtensionContext, store: AgentStor
 			}
 			record.pendingFirstPrompt = false;
 			if (queuedId) { removeQueued(queuedId); }
+			record.updatedAt = new Date().toISOString();
 			active.prompting = true;
 			active.activity = 'Working';
 			void rememberOptions();
@@ -460,6 +462,7 @@ export function createSession(context: vscode.ExtensionContext, store: AgentStor
 		if (!prompt) { return; }
 		steering = session.steer(prompt.parts).then(outcome => {
 			if (outcome === 'injected') {
+				record.updatedAt = new Date().toISOString();
 				removeQueued(id);
 				messages.push(prompt.pendingMessage);
 			}
