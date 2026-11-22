@@ -18,6 +18,7 @@ import { ICommandEvent, ICommandService } from '../../../../../platform/commands
 import { TestConfigurationService } from '../../../../../platform/configuration/test/common/testConfigurationService.js';
 import { ContextKeyExpression } from '../../../../../platform/contextkey/common/contextkey.js';
 import { IHoverService } from '../../../../../platform/hover/browser/hover.js';
+import { IOpenerService } from '../../../../../platform/opener/common/opener.js';
 import { MockContextKeyService } from '../../../../../platform/keybinding/test/common/mockKeybindingService.js';
 import { IProductService } from '../../../../../platform/product/common/productService.js';
 import { ITelemetryService } from '../../../../../platform/telemetry/common/telemetry.js';
@@ -167,21 +168,49 @@ suite('UpdateTitleBarVisibleContexts', () => {
 suite('UpdateTooltip', () => {
 	const store = ensureNoDisposablesAreLeakedInTestSuite();
 
-	function createTooltip(): UpdateTooltip {
+	function createTooltip(product: Partial<IProductService> = { releaseNotesUrl: 'https://example.com/updates' }, open: IOpenerService['open'] = async () => assert.fail('Unexpected open')): UpdateTooltip {
 		const configurationService = new TestConfigurationService({ 'update.mode': 'default' });
 		store.add(configurationService.onDidChangeConfigurationEmitter);
 		return store.add(new UpdateTooltip(
 			new class extends mock<IClipboardService>() { },
 			store.add(new TestCommandService()),
 			configurationService,
-			new TestHoverService(),
-			new class extends mock<IProductService>() {
+			new class extends TestHoverService {
+				override hideHover(): void { }
+			},
+			Object.assign(new class extends mock<IProductService>() {
 				override readonly nameLong = 'Code - OSS Dev';
 				override readonly version = '1.134.0';
 				override readonly commit = 'current';
+			}, product),
+			new class extends mock<IOpenerService>() {
+				override open = open;
 			},
 		));
 	}
+
+	test('opens the Otrion release matching the current update state', () => {
+		const opened: string[] = [];
+		const tooltip = createTooltip({ otrionUpdateRepository: 'example/otrion', otrionVersion: '0.1.12' }, async (uri, options) => {
+			assert.deepStrictEqual(options, { openExternal: true });
+			opened.push(uri.toString());
+			return true;
+		});
+		const update = { version: 'next', productVersion: '0.1.13' };
+		const button = tooltip.domNode.querySelector<HTMLButtonElement>('.release-notes-button')!;
+		for (const state of [State.Uninitialized, State.Downloading(undefined, true, false), State.Ready(update, false, false), State.Overwriting(update, true)]) {
+			tooltip.renderState(state);
+			button.click();
+		}
+		assert.deepStrictEqual(opened, ['tag/v0.1.12', 'latest', 'tag/v0.1.13', 'latest'].map(path => `https://github.com/example/otrion/releases/${path}`));
+	});
+
+	test('keeps the download action available when there are no release notes', () => {
+		const tooltip = createTooltip({});
+		tooltip.renderState(State.AvailableForDownload({ version: 'next', productVersion: '1.135.0' }));
+		assert.strictEqual(tooltip.domNode.querySelector<HTMLElement>('.release-notes-button')!.style.display, 'none');
+		assert.strictEqual(tooltip.domNode.querySelector<HTMLElement>('.button-bar')!.style.display, '');
+	});
 
 	test('removes hidden actions from the tab order', () => {
 		const tooltip = createTooltip();
