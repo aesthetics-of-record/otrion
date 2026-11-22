@@ -7,11 +7,14 @@ import * as dom from '../../../../base/browser/dom.js';
 import { Codicon } from '../../../../base/common/codicons.js';
 import { Disposable } from '../../../../base/common/lifecycle.js';
 import { ThemeIcon } from '../../../../base/common/themables.js';
+import { hasKey } from '../../../../base/common/types.js';
+import { URI } from '../../../../base/common/uri.js';
 import { localize } from '../../../../nls.js';
 import { IClipboardService } from '../../../../platform/clipboard/common/clipboardService.js';
 import { ICommandService } from '../../../../platform/commands/common/commands.js';
 import { IConfigurationService } from '../../../../platform/configuration/common/configuration.js';
 import { IHoverService } from '../../../../platform/hover/browser/hover.js';
+import { IOpenerService } from '../../../../platform/opener/common/opener.js';
 import { IProductService } from '../../../../platform/product/common/productService.js';
 import { AvailableForDownload, Disabled, DisablementReason, Downloaded, Downloading, Idle, IUpdate, Overwriting, Ready, Restarting, State, StateType, Updating } from '../../../../platform/update/common/update.js';
 import { ShowCurrentReleaseNotesActionId } from '../common/update.js';
@@ -57,7 +60,7 @@ export class UpdateTooltip extends Disposable {
 	private readonly releaseNotesButton: HTMLButtonElement;
 	private readonly actionButton: HTMLButtonElement;
 
-	private releaseNotesVersion: string | undefined;
+	private releaseNotesTarget: URI | string | undefined;
 
 	constructor(
 		@IClipboardService private readonly clipboardService: IClipboardService,
@@ -65,6 +68,7 @@ export class UpdateTooltip extends Disposable {
 		@IConfigurationService private readonly configurationService: IConfigurationService,
 		@IHoverService private readonly hoverService: IHoverService,
 		@IProductService private readonly productService: IProductService,
+		@IOpenerService private readonly openerService: IOpenerService,
 	) {
 		super();
 
@@ -121,8 +125,11 @@ export class UpdateTooltip extends Disposable {
 		this.releaseNotesButton = dom.append(this.buttonBar, dom.$('button.release-notes-button')) as HTMLButtonElement;
 		this.releaseNotesButton.textContent = localize('updateTooltip.viewReleaseNotes', "Release Notes");
 		this._register(dom.addDisposableListener(this.releaseNotesButton, 'click', () => {
-			if (this.releaseNotesVersion) {
-				this.runCommandAndClose(ShowCurrentReleaseNotesActionId, this.releaseNotesVersion);
+			if (URI.isUri(this.releaseNotesTarget)) {
+				void this.openerService.open(this.releaseNotesTarget, { openExternal: true });
+				this.hoverService.hideHover(true);
+			} else if (this.releaseNotesTarget) {
+				this.runCommandAndClose(ShowCurrentReleaseNotesActionId, this.releaseNotesTarget);
 			}
 		}));
 
@@ -163,11 +170,11 @@ export class UpdateTooltip extends Disposable {
 		this.actionButton.style.display = 'none';
 		this.actionButton.tabIndex = -1;
 		this.actionButton.dataset.commandId = '';
-		this.releaseNotesButton.style.marginRight = '';
 	}
 
 	public renderState(state: State) {
 		this.hideAll();
+		this.renderReleaseNotesButton(state);
 		switch (state.type) {
 			case StateType.Uninitialized:
 				this.renderUninitialized();
@@ -399,16 +406,30 @@ export class UpdateTooltip extends Disposable {
 		} else {
 			this.releaseDateNode.style.display = 'none';
 		}
+	}
 
-		// Release notes button
-		this.releaseNotesVersion = version ?? this.productService.version;
-		this.releaseNotesButton.style.display = this.releaseNotesVersion ? '' : 'none';
-		this.releaseNotesButton.tabIndex = this.releaseNotesVersion ? 0 : -1;
-		this.releaseNotesButton.style.marginRight = this.releaseNotesVersion ? 'auto' : '';
-		this.buttonBar.style.display = this.releaseNotesVersion ? '' : 'none';
+	private renderReleaseNotesButton(state: State) {
+		const pending = state.type === StateType.Downloading || hasKey(state, { update: true });
+		const updateVersion = pending ? state.update?.productVersion : undefined;
+		const repository = this.productService.otrionUpdateRepository;
+		if (repository) {
+			// While replacing a pending update, the download state still refers to the older release.
+			const replacing = state.type === StateType.Overwriting || (state.type === StateType.Downloading && state.overwrite);
+			const version = pending ? updateVersion : this.productService.otrionVersion;
+			const releases = URI.from({ scheme: 'https', authority: 'github.com', path: `/${repository}/releases` });
+			this.releaseNotesTarget = version && !replacing ? URI.joinPath(releases, 'tag', `v${version}`) : URI.joinPath(releases, 'latest');
+		} else {
+			this.releaseNotesTarget = this.productService.releaseNotesUrl ? updateVersion ?? this.productService.version : undefined;
+		}
+		const visible = !!this.releaseNotesTarget;
+		this.releaseNotesButton.style.display = visible ? '' : 'none';
+		this.releaseNotesButton.tabIndex = visible ? 0 : -1;
+		this.releaseNotesButton.style.marginRight = visible ? 'auto' : '';
+		this.buttonBar.style.display = visible ? '' : 'none';
 	}
 
 	private renderActionButton(label: string, commandId: string) {
+		this.buttonBar.style.display = '';
 		this.actionButton.textContent = label;
 		this.actionButton.dataset.commandId = commandId;
 		this.actionButton.style.display = '';
