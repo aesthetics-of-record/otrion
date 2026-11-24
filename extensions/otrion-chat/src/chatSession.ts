@@ -529,10 +529,12 @@ export function createSession(context: vscode.ExtensionContext, store: AgentStor
 			if (!file || (!fileOnly && ((!isAbsolute(file) && /^[a-z][a-z0-9+.-]*:/i.test(file)) || file.startsWith('//')))) { return; }
 			const cwd = record.cwd ?? await workspaceDirectory(context);
 			const uri = vscode.Uri.file(resolve(cwd, file));
-			const doc = await vscode.workspace.openTextDocument(uri);
-			const row = Math.min(doc.lineCount, Math.max(1, Number.isSafeInteger(line) ? line! : 1)) - 1;
-			const position = doc.validatePosition(new vscode.Position(row, Math.max(0, Number.isSafeInteger(column) ? column - 1 : 0)));
-			await vscode.window.showTextDocument(doc, { preview: true, selection: new vscode.Range(position, position) });
+			const options: vscode.TextDocumentShowOptions = { preview: true };
+			if (line !== undefined && Number.isSafeInteger(line)) {
+				const position = new vscode.Position(Math.max(0, line - 1), Math.max(0, column - 1));
+				options.selection = new vscode.Range(position, position);
+			}
+			await vscode.commands.executeCommand('vscode.open', uri, options);
 		} catch (error) {
 			void vscode.window.showWarningMessage('Could not open link: ' + error.message);
 		}

@@ -161,7 +161,6 @@ test('Remote SSH agents use the host runtime, credentials and file paths', async
 		workspace: {
 			isTrusted: true,
 			workspaceFolders: [{ uri }],
-			openTextDocument: async uri => ({ uri, lineCount: 20, validatePosition: p => p }),
 			getConfiguration: () => ({ get: (_, fallback) => fallback }),
 		},
 		Uri: {
@@ -170,8 +169,8 @@ test('Remote SSH agents use the host runtime, credentials and file paths', async
 		},
 		Position: class { constructor(line, character) { Object.assign(this, { line, character }); } },
 		Range: class { constructor(start, end) { Object.assign(this, { start, end }); } },
+		commands: { executeCommand: (command, uri, options) => { opened = { command, uri, ...options }; } },
 		window: {
-			showTextDocument: (doc, options) => { opened = { doc, ...options.selection.start }; },
 			createTerminal: options => { terminal = options; return { show() {} }; },
 		},
 	};
@@ -183,7 +182,7 @@ test('Remote SSH agents use the host runtime, credentials and file paths', async
 		},
 		load(url, context, next) {
 			return url === 'otrion-test:vscode'
-				? { format: 'module', source: 'export const { env, workspace, Uri, window, Position, Range } = globalThis.__otrionTestVscode;', shortCircuit: true }
+				? { format: 'module', source: 'export const { env, workspace, Uri, window, commands, Position, Range } = globalThis.__otrionTestVscode;', shortCircuit: true }
 				: next(url, context);
 		},
 	});
@@ -314,9 +313,13 @@ test('Remote SSH agents use the host runtime, credentials and file paths', async
 					['server.ts#L7-L10', 6, 0],
 				]) {
 					await session.openLink(href, false);
-					assert.equal(opened.doc.uri.fsPath, path.join(workspace, 'server.ts'));
-					assert.equal(opened.line, line);
-					assert.equal(opened.character, character);
+					assert.equal(opened.uri.fsPath, path.join(workspace, 'server.ts'));
+					assert.equal(opened.selection.start.line, line);
+					assert.equal(opened.selection.start.character, character);
+				}
+				for (const name of ['fault-draw.wav', 'clip.mp4', 'image.png']) {
+					await session.openLink(name, false);
+					assert.deepEqual(opened, { command: 'vscode.open', uri: mock.Uri.file(path.join(workspace, name)), preview: true });
 				}
 				await session.configure();
 				assert.equal(states.at(-1).connectionIssue, 'setup');
