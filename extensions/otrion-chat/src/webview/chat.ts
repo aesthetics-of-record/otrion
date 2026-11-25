@@ -35,6 +35,7 @@ interface SessionMetadata {
 	configuring: boolean;
 	connected: boolean;
 	workspace?: string;
+	cwd?: string;
 }
 let metadata: SessionMetadata = { options: [], configuring: false, connected: false };
 const modelButton = element<HTMLButtonElement>('model');
@@ -661,8 +662,9 @@ window.addEventListener('message', ({ data }) => {
 		confirmCopy(data.request);
 	} else if (data.type === 'refreshIcons') {
 		input.querySelectorAll<HTMLElement>('.resource-chip').forEach(requestChipIcon);
+		messages.querySelectorAll<HTMLElement>('.edit-file-icon').forEach(requestEditIcon);
 	} else if (data.type === 'fileIcon' && Number.isSafeInteger(data.request)) {
-		const img = input.querySelector<HTMLImageElement>(`[data-icon-request="${data.request}"] > img`);
+		const img = document.querySelector<HTMLImageElement>(`[data-icon-request="${data.request}"] > img`);
 		if (img) {
 			img.hidden = !data.src;
 			if (data.src) { img.src = data.src; }
@@ -780,6 +782,7 @@ window.addEventListener('message', ({ data }) => {
 		const follow = nearEnd() || !welcome.hidden;
 		if (tabId !== data.tabId) { messages.replaceChildren(); }
 		while (messages.childElementCount > data.messages.length) { messages.lastElementChild!.remove(); }
+		setTranscriptRoot(data.cwd ?? '');
 		data.messages.forEach((message: TranscriptRow, index: number) => renderTranscriptRow(index, message));
 		welcome.hidden = data.messages.length > 0;
 		busy = data.busy;
@@ -803,6 +806,7 @@ window.addEventListener('message', ({ data }) => {
 		updateComposer();
 		if (follow) { thread.scrollTop = thread.scrollHeight; }
 	} else if (data.type === 'metadata') {
+		if (data.cwd) { setTranscriptRoot(data.cwd); }
 		updateMetadata(data);
 		updateComposer();
 	} else if (data.type === 'transcript' && tabId === data.tabId) {

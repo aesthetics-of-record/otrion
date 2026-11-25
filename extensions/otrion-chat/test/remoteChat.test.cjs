@@ -146,6 +146,68 @@ test('ACP agents can offer legacy session options and protocol sign-in methods',
 	} finally { client.dispose(); }
 });
 
+test('Agent edits open against the live file or their recorded snapshots', async () => {
+	class Uri {
+		constructor(scheme, fsPath, query = '') { Object.assign(this, { scheme, fsPath, query }); }
+		static file(fsPath) { return new Uri('file', fsPath); }
+		with(change) { return new Uri(change.scheme ?? this.scheme, this.fsPath, change.query ?? this.query); }
+		toString() { return this.scheme + '://' + this.fsPath + (this.query ? '?' + this.query : ''); }
+	}
+	const files = new Map([['/work/lib.rs', 'fn a() {}\nfn b() { 2 }\nfn c() {}\n']]);
+	const calls = [];
+	let provider;
+	const mock = {
+		Uri,
+		Position: class { constructor(line, character) { Object.assign(this, { line, character }); } },
+		Range: class { constructor(start, end) { Object.assign(this, { start, end }); } },
+		l10n: { t: (message, ...args) => message.replace(/\{(\d+)\}/g, (_, index) => args[index]) },
+		window: { showWarningMessage: message => calls.push({ warning: message }) },
+		workspace: {
+			registerTextDocumentContentProvider: (scheme, value) => { provider = value; return { dispose() {} }; },
+			openTextDocument: async uri => {
+				if (!files.has(uri.fsPath)) { throw new Error('missing'); }
+				return { getText: () => files.get(uri.fsPath) };
+			},
+		},
+		commands: { executeCommand: async (command, ...args) => { calls.push({ command, args }); } },
+	};
+	const hooks = registerHooks({
+		resolve: (specifier, context, next) => specifier === 'vscode' ? { url: 'otrion-test:vscode-edit-review', shortCircuit: true } : next(specifier, context),
+		load: (url, context, next) => url === 'otrion-test:vscode-edit-review'
+			? { format: 'module', source: 'export const { Uri, Position, Range, l10n, window, workspace, commands } = globalThis.__otrionTestVscode;', shortCircuit: true }
+			: next(url, context),
+	});
+	globalThis.__otrionTestVscode = mock;
+	const modulePath = path.join(extension, 'out', 'editReview.js');
+	try {
+		const { registerEditReview, reviewEdit } = require(modulePath);
+		registerEditReview({ subscriptions: [] });
+		const describe = ({ command, args, warning }) => warning ? { warning } : {
+			command,
+			sides: args.slice(0, command === 'vscode.diff' ? 2 : 1).map(uri => uri.scheme === 'file' ? uri.fsPath : provider.provideTextDocumentContent(uri)),
+			line: args.at(-1).selection?.start.line,
+		};
+		const file = Uri.file('/work/lib.rs');
+		await reviewEdit(file, 'fn b() { 1 }\n', 'fn b() { 2 }\n', true);
+		await reviewEdit(file, 'fn b() { 1 }\n', 'fn b() { 2 }\n', false);
+		await reviewEdit(file, 'old\n', 'replaced later\n', true);
+		await reviewEdit(Uri.file('/work/gone.rs'), '', 'new\n', false);
+		assert.deepStrictEqual(calls.map(describe), [
+			{ command: 'vscode.diff', sides: ['fn a() {}\nfn b() { 1 }\nfn c() {}\n', '/work/lib.rs'], line: 1 },
+			{ command: 'vscode.open', sides: ['/work/lib.rs'], line: 1 },
+			{ command: 'vscode.diff', sides: ['old\n', 'replaced later\n'], line: undefined },
+			{ warning: 'gone.rs no longer exists.' },
+		]);
+	} finally {
+		// Later tests load these modules through their own vscode mock; Node caches `vscode` per requiring folder.
+		for (const key of Object.keys(require.cache)) {
+			if (key === modulePath || key.includes('vscode-edit-review')) { delete require.cache[key]; }
+		}
+		hooks.deregister();
+		delete globalThis.__otrionTestVscode;
+	}
+});
+
 test('Remote SSH agents use the host runtime, credentials and file paths', async () => {
 	const root = await fs.mkdtemp(path.join(os.tmpdir(), 'otrion remote chat '));
 	const workspace = path.join(root, 'Workspace #1');

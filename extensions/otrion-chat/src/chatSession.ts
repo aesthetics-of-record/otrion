@@ -8,6 +8,7 @@ import { AcpClient, AuthenticationRequired, type PromptPart, type SessionUpdate 
 import { agents, agentLocation, AgentStore, allowed, type AgentId } from './agents';
 import { readSessionOptions, type SessionOption } from './sessionOptions';
 import { applyTranscriptUpdate, type ChatMessage } from './transcript';
+import { reviewEdit } from './editReview';
 
 class AgentSetupError extends Error {}
 
@@ -121,7 +122,12 @@ export function createSession(context: vscode.ExtensionContext, store: AgentStor
 
 	function metadata() {
 		return { options, commands, configuring, recordedModel: record.recordedModel, connected: !!client && !client.closed,
-			workspace: record.cwd ? basename(record.cwd) : vscode.workspace.workspaceFolders?.[0]?.name };
+			workspace: record.cwd ? basename(record.cwd) : vscode.workspace.workspaceFolders?.[0]?.name, cwd: sessionDirectory() };
+	}
+
+	function sessionDirectory() {
+		const folder = vscode.workspace.workspaceFolders?.[0];
+		return record.cwd ?? (folder?.uri.scheme === 'file' ? folder.uri.fsPath : undefined);
 	}
 
 	function publishMetadata() {
@@ -540,6 +546,16 @@ export function createSession(context: vscode.ExtensionContext, store: AgentStor
 		}
 	}
 
+	async function openEdit(path: string, before: string, after: string, diff: boolean) {
+		if (!vscode.workspace.isTrusted) { return; }
+		try {
+			const cwd = record.cwd ?? await workspaceDirectory(context);
+			await reviewEdit(vscode.Uri.file(resolve(cwd, path)), before, after, diff);
+		} catch (error) {
+			void vscode.window.showWarningMessage(vscode.l10n.t('Could not open the edit: {0}', error.message));
+		}
+	}
+
 	function suspend() {
 		clearUpdates();
 		if (turn) { turn.cancelled = true; clearTimeout(turn.timer); }
@@ -554,5 +570,5 @@ export function createSession(context: vscode.ExtensionContext, store: AgentStor
 	}
 
 	return { get connected() { return sessionReady && !!client && !client.closed && authRevision === connectedRevision; },
-		get sessionCost() { return cost; }, retrySetup, invalidateAuth() { authRevision++; }, get busy() { return !!turn; }, select, snapshot, send, sendQueued, discardQueued, openLink, stop, configure, attach, describeResources, findContext, suspend, dispose() { disposed = true; search?.cancel(); suspend(); } };
+		get sessionCost() { return cost; }, retrySetup, invalidateAuth() { authRevision++; }, get busy() { return !!turn; }, select, snapshot, send, sendQueued, discardQueued, openLink, openEdit, stop, configure, attach, describeResources, findContext, suspend, dispose() { disposed = true; search?.cancel(); suspend(); } };
 }

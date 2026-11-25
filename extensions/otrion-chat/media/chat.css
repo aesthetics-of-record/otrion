@@ -273,8 +273,8 @@ details[open] > .activity-heading svg { transform: rotate(90deg); }
 }
 .activity-output > pre { white-space: pre-wrap; overflow-wrap: anywhere; background: transparent; padding-top: 2px; }
 .tool-location { display: block; text-align: left; overflow-wrap: anywhere; font: 11px var(--mono); }
-.diff-add, .hljs-addition { color: var(--vscode-gitDecoration-addedResourceForeground); }
-.diff-remove, .hljs-deletion { color: var(--vscode-gitDecoration-deletedResourceForeground); }
+.hljs-addition { color: var(--vscode-gitDecoration-addedResourceForeground); }
+.hljs-deletion { color: var(--vscode-gitDecoration-deletedResourceForeground); }
 .hljs-keyword, .hljs-selector-tag, .hljs-literal { color: var(--vscode-symbolIcon-keywordForeground, var(--accent)); }
 .hljs-string, .hljs-regexp, .hljs-attr { color: var(--vscode-debugTokenExpression-string); }
 .hljs-number, .hljs-built_in, .hljs-type { color: var(--vscode-debugTokenExpression-number); }
@@ -318,3 +318,72 @@ article.user { position: relative; }
 .transcript-action:hover, .transcript-action:focus-visible { color: var(--vscode-foreground); background: transparent; }
 .transcript-action svg + svg, .transcript-action.copied svg:first-child { display: none; }
 .transcript-action.copied svg + svg { display: block; color: var(--vscode-testing-iconPassed, var(--accent)); }
+
+/* File edits: a file header with open actions over a collapsible inline diff, like a review card. */
+body {
+	--added: var(--vscode-gitDecoration-addedResourceForeground, #587c0c);
+	--removed: var(--vscode-gitDecoration-deletedResourceForeground, #ad0707);
+}
+.edit-activity { margin: 6px 0; }
+.edit-card {
+	margin: 6px 0; border: 1px solid var(--line); border-radius: 8px; overflow: hidden;
+	background: var(--vscode-textCodeBlock-background, var(--surface)); color: var(--vscode-foreground);
+}
+.edit-header {
+	display: flex; align-items: center; gap: 6px; min-height: 30px; padding: 2px 4px 2px 2px;
+	font-size: 12px; cursor: pointer; user-select: none;
+}
+.edit-header:hover { background: var(--vscode-list-hoverBackground); }
+.edit-card.expanded > .edit-header { border-bottom: 1px solid var(--line); }
+.edit-header svg { fill: none; stroke: currentColor; stroke-width: 1.5; stroke-linecap: round; stroke-linejoin: round; }
+.edit-toggle, .edit-action {
+	flex: none; display: inline-grid; place-items: center; width: 22px; height: 22px; padding: 0;
+	border-radius: 4px; color: var(--muted);
+}
+.edit-toggle svg { width: 14px; height: 14px; }
+.edit-card.expanded .edit-toggle svg { transform: rotate(90deg); }
+@media (prefers-reduced-motion: no-preference) { .edit-toggle svg { transition: transform 100ms ease-out; } }
+.edit-file-icon { flex: none; display: inline-grid; place-items: center; width: 16px; height: 16px; color: var(--muted); }
+.edit-file-icon img { width: 16px; height: 16px; }
+.edit-file-icon img:not([hidden]) + svg { display: none; }
+.edit-name {
+	flex: 0 1 auto; min-width: 0; padding: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+	font-weight: 600; color: var(--vscode-foreground); border-radius: 3px;
+}
+.edit-name:hover { background: none; color: var(--accent); text-decoration: underline; }
+.edit-folder {
+	flex: 1 1 0; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+	color: var(--muted); font-size: 11px; direction: rtl; text-align: left;
+}
+.edit-stats { flex: none; display: inline-flex; align-items: center; gap: 5px; font: 11px var(--mono); }
+.edit-stats .added { color: var(--added); }
+.edit-stats .removed { color: var(--removed); }
+.edit-badge {
+	padding: 0 5px; border-radius: 8px; font: 10px/16px var(--vscode-font-family);
+	color: var(--added); background: color-mix(in srgb, var(--added) 14%, transparent);
+}
+.edit-state { flex: none; font-size: 10px; color: var(--muted); }
+.edit-state:empty { display: none; }
+.edit-activity[data-status=in_progress] .edit-state { color: var(--accent); }
+.edit-activity[data-failed] .edit-state { color: var(--vscode-errorForeground); }
+.edit-action:hover, .edit-toggle:hover { color: var(--vscode-foreground); background: var(--vscode-toolbar-hoverBackground); }
+.edit-action svg { width: 15px; height: 15px; }
+.edit-diff { max-height: min(20em, 45vh); overflow: auto; scrollbar-width: thin; }
+.edit-diff:focus-visible { outline-offset: -1px; }
+.diff-code { display: grid; min-width: 100%; width: max-content; padding: 3px 0; font: 12px/1.6 var(--mono); }
+.diff-line { position: relative; padding: 0 12px 0 22px; white-space: pre; tab-size: 4; }
+.diff-line::before {
+	content: attr(data-sign); position: absolute; left: 8px; width: 8px; color: var(--muted); user-select: none;
+}
+.diff-line.add { background: var(--vscode-diffEditor-insertedLineBackground, color-mix(in srgb, var(--added) 16%, transparent)); }
+.diff-line.remove { background: var(--vscode-diffEditor-removedLineBackground, color-mix(in srgb, var(--removed) 16%, transparent)); }
+.diff-line.add::before { color: var(--added); }
+.diff-line.remove::before { color: var(--removed); }
+.diff-line.gap { height: 1.6em; margin: 2px 0; background: color-mix(in srgb, var(--muted) 7%, transparent); }
+.diff-line.gap::before { content: '⋯'; left: 22px; width: auto; }
+.diff-more, .edit-note button { padding: 0; color: var(--accent); font-size: 11px; }
+.diff-more { display: block; margin: 0 0 6px 22px; }
+.diff-more:hover, .edit-note button:hover { background: none; text-decoration: underline; }
+.edit-note { margin: 0; padding: 8px 12px; color: var(--muted); font-size: 12px; }
+:is(.vscode-high-contrast, .vscode-high-contrast-light) .diff-line:is(.add, .remove) { outline: 1px dashed var(--vscode-contrastBorder); outline-offset: -1px; }
+.edit-activity > .activity-output pre { color: var(--vscode-errorForeground); }

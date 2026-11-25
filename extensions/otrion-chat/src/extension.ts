@@ -10,12 +10,14 @@ import { registerSettings } from './settings';
 import { chatHtml } from './chatHtml';
 import { createSession, type SessionRecord } from './chatSession';
 import { registerThemeGuide } from './themeGuide';
+import { registerEditReview } from './editReview';
 
 export function activate(context: vscode.ExtensionContext) {
 	const media = vscode.Uri.joinPath(context.extensionUri, 'media');
 	const scripts = vscode.Uri.joinPath(context.extensionUri, 'out', 'webview');
 	const store = new AgentStore(vscode.Uri.joinPath(context.globalStorageUri, 'agents').fsPath, context.secrets);
 	registerThemeGuide(context);
+	registerEditReview(context);
 	const history = new SessionHistory(context, store);
 	const recent = new SessionHistory(context, store);
 	const sidebar = new SessionHistory(context, store);
@@ -309,6 +311,11 @@ export function activate(context: vscode.ExtensionContext) {
 					break;
 				case 'openChatFile':
 					if (typeof message.path === 'string') { void tab.openLink(message.path, true, message.line); }
+					break;
+				case 'openChatEdit':
+					if (typeof message.path === 'string' && typeof message.before === 'string' && typeof message.after === 'string') {
+						void tab.openEdit(message.path, message.before, message.after, message.diff === true);
+					}
 					break;
 				case 'copyCode':
 					if (typeof message.text === 'string') {

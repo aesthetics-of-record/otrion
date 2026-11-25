@@ -2,7 +2,7 @@
 
 import MarkdownIt from 'markdown-it';
 import hljs from 'highlight.js/lib/common';
-import { createTwoFilesPatch } from 'diff';
+import { structuredPatch } from 'diff';
 
 const md = new MarkdownIt({
 	html: false,
@@ -95,6 +95,35 @@ export function render(source: string, copyButton: (text: string) => HTMLButtonE
 	return fragment;
 }
 
-export function patch(path: string, before: string, after: string) {
-	return createTwoFilesPatch(path, path, before, after, undefined, undefined, { context: 3, timeout: 100 });
+/** A rendered row of an inline file diff; `html` is escaped and may contain syntax spans. */
+export interface DiffRow {
+	type: 'add' | 'remove' | 'context' | 'gap';
+	html: string;
+}
+
+const maxHighlightedRows = 2000;
+
+/** Diff two file versions into syntax-highlighted rows with change counts, or undefined when diffing times out. */
+export function fileDiff(path: string, before: string, after: string) {
+	const result = structuredPatch(path, path, before, after, undefined, undefined, { context: 3, timeout: 100 });
+	if (!result) { return undefined; }
+	const extension = /\.(?<extension>[\w+-]+)$/.exec(path)?.groups?.extension.toLowerCase();
+	const language = extension && hljs.getLanguage(extension) ? extension : undefined;
+	const rows: DiffRow[] = [];
+	let added = 0;
+	let removed = 0;
+	for (const hunk of result.hunks) {
+		if (rows.length) { rows.push({ type: 'gap', html: '' }); }
+		for (const line of hunk.lines) {
+			const sign = line[0];
+			if (sign !== '+' && sign !== '-' && sign !== ' ') { continue; }
+			if (sign === '+') { added++; } else if (sign === '-') { removed++; }
+			const text = line.slice(1);
+			const html = language && rows.length < maxHighlightedRows && text.length < 2000
+				? hljs.highlight(text, { language, ignoreIllegals: true }).value
+				: md.utils.escapeHtml(text);
+			rows.push({ type: sign === '+' ? 'add' : sign === '-' ? 'remove' : 'context', html });
+		}
+	}
+	return { added, removed, rows };
 }
