@@ -7,7 +7,7 @@ import * as vscode from 'vscode';
 import { AcpClient, AuthenticationRequired, type PromptPart, type SessionUpdate } from './acp';
 import { agents, agentLocation, AgentStore, allowed, type AgentId } from './agents';
 import { readSessionOptions, type SessionOption } from './sessionOptions';
-import { applyTranscriptUpdate, type ChatMessage } from './transcript';
+import { applyTranscriptUpdate, type ChatMessage, type MessagePart } from './transcript';
 import { reviewEdit } from './editReview';
 
 class AgentSetupError extends Error {}
@@ -352,20 +352,25 @@ export function createSession(context: vscode.ExtensionContext, store: AgentStor
 		if (!Array.isArray(input)) { return; }
 		const parts: PromptPart[] = [];
 		const images: NonNullable<ChatMessage['artifacts']> = [];
+		const mentions: MessagePart[] = [];
 		for (const part of input) {
 			if (part?.type === 'text' && typeof part.text === 'string') {
 				parts.push({ type: 'text', text: part.text });
+				mentions.push({ type: 'text', text: part.text });
 			} else if (part?.type === 'image' && typeof part.data === 'string' && part.data.length > 0 && part.data.length <= 5592408 && /^image\/(png|jpeg|webp|gif)$/.test(part.mimeType)) {
 				parts.push({ type: 'image', mimeType: part.mimeType, data: part.data });
 				images.push({ label: typeof part.name === 'string' && part.name ? part.name : 'Image', image: 'data:' + part.mimeType + ';base64,' + part.data });
 			} else if (part?.type === 'resource_link' && typeof part.uri === 'string' && part.uri.startsWith('file://')) {
 				const uri = vscode.Uri.parse(part.uri);
-				parts.push({ type: 'resource_link', uri: pathToFileURL(uri.fsPath).href, name: basename(uri.fsPath) || uri.fsPath });
+				const link = { type: 'resource_link', uri: pathToFileURL(uri.fsPath).href, name: basename(uri.fsPath) || uri.fsPath } as const;
+				parts.push(link);
+				mentions.push({ ...link, folder: part.folder === true });
 			}
 		}
 		const text = parts.map(part => part.type === 'text' ? part.text : part.type === 'image' ? '' : '@' + part.name).join('');
 		if (!text.trim() && !images.length) { return; }
 		const pendingMessage: ChatMessage = { role: 'You', text };
+		if (mentions.some(part => part.type === 'resource_link')) { pendingMessage.parts = mentions; }
 		if (images.length) { pendingMessage.artifacts = images; }
 		return { parts, pendingMessage };
 	}

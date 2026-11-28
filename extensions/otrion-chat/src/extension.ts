@@ -292,7 +292,11 @@ export function activate(context: vscode.ExtensionContext) {
 					break;
 				case 'fileIcon':
 					if (typeof message.uri === 'string' && message.uri.startsWith('file:') && Number.isSafeInteger(message.request)) {
-						void vscode.commands.executeCommand<string>('_otrion.chat.fileIcon', vscode.Uri.parse(message.uri), message.folder === true).then(
+						// Replayed mentions do not say whether they name a folder, so ask the file system.
+						const uri = vscode.Uri.parse(message.uri);
+						const folder = typeof message.folder === 'boolean' ? Promise.resolve(message.folder)
+							: Promise.resolve(vscode.workspace.fs.stat(uri)).then(stat => !!(stat.type & vscode.FileType.Directory), () => false);
+						void folder.then(folder => vscode.commands.executeCommand<string>('_otrion.chat.fileIcon', uri, folder)).then(
 							src => webview.postMessage({ type: 'fileIcon', request: message.request, src }),
 							() => webview.postMessage({ type: 'fileIcon', request: message.request })
 						);

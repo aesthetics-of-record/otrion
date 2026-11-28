@@ -662,6 +662,7 @@ window.addEventListener('message', ({ data }) => {
 		confirmCopy(data.request);
 	} else if (data.type === 'refreshIcons') {
 		input.querySelectorAll<HTMLElement>('.resource-chip').forEach(requestChipIcon);
+		messages.querySelectorAll<HTMLElement>('.resource-chip').forEach(requestChipIcon);
 		messages.querySelectorAll<HTMLElement>('.edit-file-icon').forEach(requestEditIcon);
 	} else if (data.type === 'fileIcon' && Number.isSafeInteger(data.request)) {
 		const img = document.querySelector<HTMLImageElement>(`[data-icon-request="${data.request}"] > img`);

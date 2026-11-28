@@ -47,6 +47,36 @@ function formatted(text: string) {
 	return otrionMarkdown.render(text, code => copyButton('Copy code', () => code), href => post({ type: 'openChatLink', href }));
 }
 
+/** Render a message, showing mentioned files and folders as the same chips the composer uses. */
+function messageContent(row: TranscriptRow) {
+	const links = row.parts?.filter(part => part.type === 'resource_link');
+	if (!row.parts || !links?.length) { return formatted(row.text); }
+	let index = 0;
+	const source = row.parts.map(part => part.type === 'text' ? part.text : '\uE000' + index++ + '\uE001').join('');
+	const fragment = formatted(source);
+	const walker = document.createTreeWalker(fragment, NodeFilter.SHOW_TEXT);
+	const nodes: Text[] = [];
+	while (walker.nextNode()) { nodes.push(walker.currentNode as Text); }
+	for (const node of nodes) {
+		const pieces = node.data.split(/\uE000(?<index>\d+)\uE001/);
+		if (pieces.length === 1) { continue; }
+		const code = !!node.parentElement?.closest('code, pre');
+		node.replaceWith(...pieces.map((piece, position) => {
+			if (position % 2 === 0) { return piece; }
+			const link = links[Number(piece)];
+			if (code) { return '@' + link.name; }
+			const chip = resourceChip(link);
+			chip.removeAttribute('contenteditable');
+			if (link.folder !== true) {
+				chip.classList.add('openable');
+				chip.addEventListener('click', () => post({ type: 'openChatLink', href: link.uri }));
+			}
+			return chip;
+		}));
+	}
+	return fragment;
+}
+
 // Command payloads from the Codex and Claude adapters may be shell text or an argv array.
 function commandText(row: TranscriptRow): string | undefined {
 	if (row.kind !== 'tool') { return; }
@@ -488,7 +518,7 @@ function renderTranscriptRow(index: number, message: TranscriptRow) {
 			body.textContent = message.text;
 			row.replaceChildren(label, body);
 		} else {
-			body.append(formatted(message.text));
+			body.append(messageContent(message));
 			// Keep the copy button focused while the response streams.
 			const copy = row.querySelector(':scope > .transcript-action');
 			if (copy && message.text) {
