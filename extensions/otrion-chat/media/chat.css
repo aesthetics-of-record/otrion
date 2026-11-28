@@ -176,6 +176,8 @@ body { flex-direction: row; }
 #input { display: block; min-height: 46px; max-height: 9em; overflow-y: auto; white-space: pre-wrap; overflow-wrap: anywhere; cursor: text; }
 .resource-chip { display: inline; box-decoration-break: clone; border-radius: 4px; padding: 1px 4px; margin-inline: 1px; color: var(--vscode-textLink-foreground); background: color-mix(in srgb, currentColor 12%, transparent); font-size: .95em; }
 .resource-chip img { width: 16px; height: 16px; vertical-align: -.2em; margin-inline-end: 3px; }
+.resource-chip.openable { cursor: pointer; }
+.resource-chip.openable:hover { text-decoration: underline; }
 #context { anchor-name: --context-trigger; }
 #context-panel { position: fixed; position-anchor: --context-trigger; inset: auto; bottom: calc(anchor(top) + 4px); right: clamp(5px, anchor(right), calc(100vw - min(244px, 100vw - 10px) - 5px)); width: min(244px, calc(100vw - 10px)); margin: 0; }
 #welcome:has(#home:not([hidden])) { min-height: 0; max-width: 380px; margin: clamp(26px, 9vh, 80px) auto 24px; grid-template-columns: auto 1fr; justify-items: start; justify-content: stretch; align-items: center; gap: 10px; }

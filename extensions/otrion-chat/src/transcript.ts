@@ -1,5 +1,7 @@
 /* Copyright (c) Otrion contributors. Licensed under the MIT License. */
 
+import { basename } from 'node:path';
+import { pathToFileURL } from 'node:url';
 import { stripVTControlCharacters } from 'node:util';
 import type { SessionUpdate } from './acp';
 
@@ -22,9 +24,14 @@ export interface ToolContent {
 	terminalId?: string;
 }
 
+/** A user prompt segment; mentioned files keep their identity so the transcript can show them as chips. */
+export type MessagePart = { type: 'text'; text: string } | { type: 'resource_link'; uri: string; name: string; folder?: boolean };
+
 export interface ChatMessage {
 	role: string;
 	text: string;
+	/** Set on user messages that mention files or folders. */
+	parts?: MessagePart[];
 	messageId?: string;
 	kind?: 'thought' | 'tool' | 'plan' | 'notice' | 'compaction';
 	compactionId?: string;
@@ -77,6 +84,17 @@ function artifacts(content: ToolContent[]): NonNullable<ChatMessage['artifacts']
 		}
 	}
 	return parts;
+}
+
+function appendUserPart(row: ChatMessage, block: ContentBlock, text: string) {
+	if (block.type === 'resource_link' && block.uri) {
+		const uri = block.uri.startsWith('/') ? pathToFileURL(block.uri).href : block.uri;
+		row.parts ??= row.text ? [{ type: 'text', text: row.text }] : [];
+		row.parts.push({ type: 'resource_link', uri, name: block.name || basename(block.uri) || block.uri });
+	} else if (row.parts) {
+		const last = row.parts.at(-1);
+		if (last?.type === 'text') { last.text += text; } else { row.parts.push({ type: 'text', text }); }
+	}
 }
 
 /** Apply the same ordered ACP updates to live turns and session/load replay. */
@@ -146,7 +164,8 @@ export function applyTranscriptUpdate(rows: ChatMessage[], agent: string, update
 		rows.push(row);
 	}
 	const image = imageSource(block);
-	if (image) { (row.artifacts ??= []).push({ label: 'Image', image }); }
-	else { row.text += text; }
+	if (image) { (row.artifacts ??= []).push({ label: 'Image', image }); return rows.length - 1; }
+	if (role === 'You') { appendUserPart(row, block, text); }
+	row.text += text;
 	return rows.length - 1;
 }

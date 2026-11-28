@@ -9,7 +9,8 @@ let iconSequence = 0;
 function requestChipIcon(chip: HTMLElement) {
 	const request = ++iconSequence;
 	chip.dataset.iconRequest = String(request);
-	post({ type: 'fileIcon', request, uri: chip.dataset.uri, folder: chip.dataset.folder === 'true' });
+	const { folder } = chip.dataset;
+	post({ type: 'fileIcon', request, uri: chip.dataset.uri, folder: folder === undefined ? undefined : folder === 'true' });
 }
 
 function resourceChip(file: InlineResource) {
@@ -18,8 +19,8 @@ function resourceChip(file: InlineResource) {
 	chip.contentEditable = 'false';
 	chip.dataset.uri = file.uri;
 	chip.dataset.name = file.name;
-	chip.dataset.folder = String(!!file.folder);
-	chip.title = (file.folder ? 'Folder' : 'File') + ' · ' + file.uri;
+	if (file.folder !== undefined) { chip.dataset.folder = String(file.folder); }
+	chip.title = file.folder === undefined ? file.uri : (file.folder ? 'Folder' : 'File') + ' · ' + file.uri;
 	const image = document.createElement('img');
 	image.alt = '';
 	image.hidden = true;

@@ -29,6 +29,18 @@ test('Managed versions retain prior installations and order Pi and Cursor releas
 	assert.equal(isNewer('cursor', { version: '2026.11.20-00aabbb' }, { version: '2026.11.19-fffffff' }), true);
 });
 
+test('Replayed user messages keep mentioned files as parts', () => {
+	const { applyTranscriptUpdate } = require(path.join(extension, 'out', 'transcript.js'));
+	const rows = [];
+	for (const content of [{ type: 'text', text: 'Compare ' }, { type: 'resource_link', uri: 'file:///work/src', name: 'src' }, { type: 'text', text: ' and ' }, { type: 'resource_link', uri: '/work/a.md' }]) {
+		applyTranscriptUpdate(rows, 'Agent', { sessionUpdate: 'user_message_chunk', messageId: 'm', content });
+	}
+	assert.deepEqual(rows, [{
+		role: 'You', kind: undefined, messageId: 'm', text: 'Compare @src and @/work/a.md',
+		parts: [{ type: 'text', text: 'Compare ' }, { type: 'resource_link', uri: 'file:///work/src', name: 'src' }, { type: 'text', text: ' and ' }, { type: 'resource_link', uri: pathToFileURL('/work/a.md').href, name: 'a.md' }],
+	}]);
+});
+
 test('Antigravity checks the native download and isolates Gemini key settings', async () => {
 	const { configureAntigravityKeyProfile, installAntigravity } = require(path.join(extension, 'out', 'antigravity.js'));
 	const home = await fs.mkdtemp(path.join(os.tmpdir(), 'otrion-agy-test-'));
@@ -393,7 +405,10 @@ test('Remote SSH agents use the host runtime, credentials and file paths', async
 				// VS Code may encode the Windows drive colon. The ACP agent expects a standard file URL.
 				const resource = pathToFileURL(attached).href.replace(/^file:\/\/\/([a-z]):/i, 'file:///$1%3A');
 				await session.send([{ type: 'resource_link', uri: resource }, { type: 'image', mimeType: 'image/png', data: 'aW1n' }]);
-				assert.deepEqual(record.messages, [{ role: 'You', text: '@notes #1.md', artifacts: [{ label: 'Image', image: 'data:image/png;base64,aW1n' }] }]);
+				assert.deepEqual(record.messages, [{
+					role: 'You', text: '@notes #1.md', artifacts: [{ label: 'Image', image: 'data:image/png;base64,aW1n' }],
+					parts: [{ type: 'resource_link', uri: pathToFileURL(attached).href, name: 'notes #1.md', folder: false }],
+				}]);
 				assert.equal(record.remoteId, 'fixture');
 				const text = value => [{ type: 'text', text: value }];
 				const live = session.send(text('hold'));
